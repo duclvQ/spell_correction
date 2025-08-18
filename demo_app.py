@@ -230,7 +230,7 @@ class SpellCheckApp:
                     
         
         # For demo purposes, limit to first few errors
-        return potential_errors[:5]
+        return potential_errors[:10]
 
 def main():
     root = tk.Tk()
