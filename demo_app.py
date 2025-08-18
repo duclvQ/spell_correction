@@ -179,13 +179,14 @@ class SpellCheckApp:
         # words = tokenized.split()
         # Create a set of error word indices for quick lookup
         print(f"Errors: {errors}")
-        error_words = {error[1].replace("_", " ").lower() for error in errors}
+        error_words = [error[0].replace("_", " ").lower() for error in errors]
         for er in error_words:
             print("Replacing error word:", er, "to", er.replace(" ", "_").lower())
             sentence = sentence.replace(er, er.replace(" ", "_").lower()) 
         words = sentence.split()
         for i, word in enumerate(words):
             print(f"Word: {word}, Index: {i}")
+            print(f"Error Words: {error_words}")
             if "_" in word or word in error_words:
                 # This word has an error - underline it
                 word = word.replace("_", " ").lower()
