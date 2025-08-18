@@ -3,6 +3,14 @@ from tkinter import ttk, scrolledtext
 import threading
 from mis_detection import sentence_prediction
 import re 
+import unicodedata
+def remove_special_characters(s):
+    """Remove special characters from a string."""
+    return re.sub(r'[^a-zA-Z0-9\s]', '', s)
+def normalize_text(s):
+    """Normalize text by removing special characters and converting to lowercase."""
+    s = remove_special_characters(s)
+    return unicodedata.normalize("NFC", s).lower()
 class SpellCheckApp:
     def __init__(self, root):
         self.root = root
@@ -146,17 +154,6 @@ class SpellCheckApp:
                     # Display the sentence with underlined errors
                     self._display_sentence_with_errors(line, line_errors)
                     
-                    # # Display suggestions
-                    # self.warnings_text.insert(tk.END, "\nSuggestions:\n", "normal")
-                    # for i, (word, _, suggestions) in enumerate(line_errors, 1):
-                    #     self.warnings_text.insert(tk.END, f"  {i}. ", "normal")
-                    #     self.warnings_text.insert(tk.END, f"'{word}'", "error")
-                    #     self.warnings_text.insert(tk.END, " → ", "normal")
-                    #     if isinstance(suggestions, list) and suggestions:
-                    #         self.warnings_text.insert(tk.END, f"{suggestions[0]}", "suggestion")
-                    #     else:
-                    #         self.warnings_text.insert(tk.END, f"{suggestions}", "suggestion")
-                    #     self.warnings_text.insert(tk.END, "\n", "normal")
                 else:
                     # Display sentence without errors
                     self.warnings_text.insert(tk.END, line, "correct")
@@ -184,10 +181,14 @@ class SpellCheckApp:
             print("Replacing error word:", er, "to", er.replace(" ", "_").lower())
             sentence = sentence.replace(er, er.replace(" ", "_").lower()) 
         words = sentence.split()
+        error_words = [normalize_text(e) for e in error_words]
+
         for i, word in enumerate(words):
             print(f"Word: {word}, Index: {i}")
             print(f"Error Words: {error_words}")
-            if "_" in word or word in error_words:
+            word = normalize_text(word)
+            if ("_" in word) or (word in error_words):
+                print(f"Error found in word: {word}")
                 # This word has an error - underline it
                 word = word.replace("_", " ").lower()
                 self.warnings_text.insert(tk.END, word, "error")
