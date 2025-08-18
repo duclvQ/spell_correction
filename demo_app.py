@@ -4,12 +4,18 @@ import threading
 from mis_detection import sentence_prediction
 import re 
 import unicodedata
+import copy
 def remove_special_characters(s):
     """Remove special characters from a string."""
-    return re.sub(r'[^a-zA-Z0-9\s]', '', s)
+    spec_list = ['!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '-', '=', '+', '{', '}', '[', ']', ':', ';', '"', "'", '<', '>', ',', '.', '?', '/', '\\']
+    ori_s = copy.deepcopy(s)
+    for spec in spec_list:
+        s = s.replace(spec, '')
+    return ori_s, s
+
 def normalize_text(s):
     """Normalize text by removing special characters and converting to lowercase."""
-    s = remove_special_characters(s)
+    ori_s, s = remove_special_characters(s)
     return unicodedata.normalize("NFC", s).lower()
 class SpellCheckApp:
     def __init__(self, root):
@@ -186,16 +192,16 @@ class SpellCheckApp:
         for i, word in enumerate(words):
             print(f"Word: {word}, Index: {i}")
             print(f"Error Words: {error_words}")
-            word = normalize_text(word)
+            ori_word, word = normalize_text(word)
             if ("_" in word) or (word in error_words):
                 print(f"Error found in word: {word}")
                 # This word has an error - underline it
                 word = word.replace("_", " ").lower()
-                self.warnings_text.insert(tk.END, word, "error")
+                self.warnings_text.insert(tk.END, ori_word, "error")
             else:
                 # This word is correct
                 word = word.replace("_", " ").lower()
-                self.warnings_text.insert(tk.END, word, "correct")
+                self.warnings_text.insert(tk.END, ori_word, "correct")
             
             # Add space between words (except for the last word)
             if i < len(words) - 1:
