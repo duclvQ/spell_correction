@@ -16,7 +16,8 @@ def remove_special_characters(s):
 def normalize_text(s):
     """Normalize text by removing special characters and converting to lowercase."""
     ori_s, s = remove_special_characters(s)
-    return unicodedata.normalize("NFC", s).lower()
+    return unicodedata.normalize("NFC", ori_s).lower(), unicodedata.normalize("NFC", s).lower()
+
 class SpellCheckApp:
     def __init__(self, root):
         self.root = root
@@ -187,7 +188,7 @@ class SpellCheckApp:
             print("Replacing error word:", er, "to", er.replace(" ", "_").lower())
             sentence = sentence.replace(er, er.replace(" ", "_").lower()) 
         words = sentence.split()
-        error_words = [normalize_text(e) for e in error_words]
+        error_words = [normalize_text(e)[1] for e in error_words]
 
         for i, word in enumerate(words):
             print(f"Word: {word}, Index: {i}")
