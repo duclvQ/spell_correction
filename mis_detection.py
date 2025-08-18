@@ -124,7 +124,7 @@ def sentence_prediction(text, top_k=30):
         alias = f"người_{idx}"
         entity_dict[alias] = entity[0]
         text = text.replace(entity[0], alias)
-
+    print(f"Entity Dict: {entity_dict}" )
     text = ViTokenizer.tokenize(text)
     error_indices = []
     for i in range(len(text.split())):
@@ -134,23 +134,32 @@ def sentence_prediction(text, top_k=30):
         if is_number(original_word):
             continue
         # if in entities, skip
-        if original_word in entity_dict.values():
+        if original_word in entity_dict.keys():
             oriname = entity_dict[original_word]
+            # add _ to the word
+            oriname = oriname.replace(" ", "_").lower()
             word, is_correct, suggestion = check_and_correct_word(oriname)
             if is_correct:
                 continue
             else:
                 error_indices.append((i, oriname, suggestion))
+            print(f"Original Word: {original_word}")
+            continue
+        if "_" in original_word:
+            continue
         new_list[i] = tokenizer.mask_token
         masked_text = " ".join(new_list)
         start_time = time.time()
         predictions = spell_pipeline(masked_text, top_k=100)
-        topk = []
+        topk: list[Unknown] = []
+        for i in range(len(predictions)):
+            # lower the prediction
+            predictions[i]['token_str'] = predictions[i]['token_str'].lower()
         for item in predictions:
             if 'token_str' in item:
                 topk.append(item['token_str'])
         end_time = time.time()
-        if original_word not in topk:
+        if original_word.lower() not in topk:
             print(f"Original Word: {original_word}")
             print(f"Masked Text: {masked_text}")
             print(f"->Top 10 Predictions: {topk}")

@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext
 import threading
 from mis_detection import sentence_prediction
+import re 
 class SpellCheckApp:
     def __init__(self, root):
         self.root = root
@@ -135,8 +136,9 @@ class SpellCheckApp:
                 if not line:
                     continue
                     
-                self.warnings_text.insert(tk.END, f"Sentence {line_num + 1}:\n", "normal")
-                
+                # self.warnings_text.insert(tk.END, f"Sentence {line_num + 1}:\n", "normal")
+     
+
                 # Get errors for this line
                 line_errors = [error for error in potential_errors if error[1] == line_num]
                 
@@ -144,17 +146,17 @@ class SpellCheckApp:
                     # Display the sentence with underlined errors
                     self._display_sentence_with_errors(line, line_errors)
                     
-                    # Display suggestions
-                    self.warnings_text.insert(tk.END, "\nSuggestions:\n", "normal")
-                    for i, (word, _, suggestions) in enumerate(line_errors, 1):
-                        self.warnings_text.insert(tk.END, f"  {i}. ", "normal")
-                        self.warnings_text.insert(tk.END, f"'{word}'", "error")
-                        self.warnings_text.insert(tk.END, " → ", "normal")
-                        if isinstance(suggestions, list) and suggestions:
-                            self.warnings_text.insert(tk.END, f"{suggestions[0]}", "suggestion")
-                        else:
-                            self.warnings_text.insert(tk.END, f"{suggestions}", "suggestion")
-                        self.warnings_text.insert(tk.END, "\n", "normal")
+                    # # Display suggestions
+                    # self.warnings_text.insert(tk.END, "\nSuggestions:\n", "normal")
+                    # for i, (word, _, suggestions) in enumerate(line_errors, 1):
+                    #     self.warnings_text.insert(tk.END, f"  {i}. ", "normal")
+                    #     self.warnings_text.insert(tk.END, f"'{word}'", "error")
+                    #     self.warnings_text.insert(tk.END, " → ", "normal")
+                    #     if isinstance(suggestions, list) and suggestions:
+                    #         self.warnings_text.insert(tk.END, f"{suggestions[0]}", "suggestion")
+                    #     else:
+                    #         self.warnings_text.insert(tk.END, f"{suggestions}", "suggestion")
+                    #     self.warnings_text.insert(tk.END, "\n", "normal")
                 else:
                     # Display sentence without errors
                     self.warnings_text.insert(tk.END, line, "correct")
@@ -173,18 +175,24 @@ class SpellCheckApp:
         from pyvi import ViTokenizer
         
         # Tokenize the sentence to match the error indices
-        tokenized = ViTokenizer.tokenize(sentence)
-        words = tokenized.split()
-        
+        # tokenized = ViTokenizer.tokenize(sentence)
+        # words = tokenized.split()
         # Create a set of error word indices for quick lookup
-        error_indices = {error[0] for error in errors}
-        
+        print(f"Errors: {errors}")
+        error_words = {error[1].replace("_", " ").lower() for error in errors}
+        for er in error_words:
+            print("Replacing error word:", er, "to", er.replace(" ", "_").lower())
+            sentence = sentence.replace(er, er.replace(" ", "_").lower()) 
+        words = sentence.split()
         for i, word in enumerate(words):
-            if i in error_indices:
+            print(f"Word: {word}, Index: {i}")
+            if "_" in word or word in error_words:
                 # This word has an error - underline it
-                self.warnings_text.insert(tk.END, word, "underline")
+                word = word.replace("_", " ").lower()
+                self.warnings_text.insert(tk.END, word, "error")
             else:
                 # This word is correct
+                word = word.replace("_", " ").lower()
                 self.warnings_text.insert(tk.END, word, "correct")
             
             # Add space between words (except for the last word)
@@ -213,7 +221,7 @@ class SpellCheckApp:
         
         for line_num, line in enumerate(lines):
             line = line.strip()
-            err = sentence_prediction(line, top_k=50)
+            err = sentence_prediction(line, top_k=1000)
             if err:
                 for idx, word, suggestions in err:
                     potential_errors.append((word, line_num, suggestions))
