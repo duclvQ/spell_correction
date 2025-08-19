@@ -47,6 +47,10 @@ dict_map = {
     "Ụy": "Uỵ",
     "ỤY": "UỴ",
     }
+removed_punctuation = [
+    "!", "?", ".", ",", ";", ":", "'", '"', "(", ")", "[", "]", "{", "}", "<", ">", "/", "\\", "|", "@", "#", "$", "%", "^", "&", "*",
+    "+", "-", "=", "~", "`"
+]
 from name_checker import check_and_correct_word
 from transformers import AutoTokenizer, AutoModelForTokenClassification
 from transformers import pipeline
@@ -94,12 +98,12 @@ from transformers import AutoModel, AutoTokenizer
 from transformers import pipeline
 spell_pipeline = pipeline(
     task="fill-mask",
-    model="vinai/phobert-base",
+    model="bmd1905/vietnamese-correction-v2",
     torch_dtype=torch.float16,
     device=0
 )
-phobert = AutoModel.from_pretrained("vinai/phobert-base")
-tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base")
+phobert = AutoModel.from_pretrained("vinai/phobert-base-v2")
+tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base-v2")
 def process_text(text):
     for key, value in dict_map.items():
         text = text.replace(key, value)
@@ -110,12 +114,19 @@ def is_number(s):
         return True
     except ValueError:
         return False
+def extract_upper_case_indices(text):
+    upper_case_indices = []
+    for i, char in enumerate(text):
+        if char.isupper():
+            upper_case_indices.append(i)
+    return upper_case_indices
+def count_character(text, char):
+    return text.count(char)
 def sentence_prediction(text, top_k=30):
     ner_results = get_raw_ner(ner_model_path, text)
-
     
     entities = extract_entities(ner_results)
-    
+    upper_indices = extract_upper_case_indices(text)
     # get entities
     print(f"Entities: {entities}")
     # create a dict the replace entities with an alias
@@ -126,14 +137,28 @@ def sentence_prediction(text, top_k=30):
         text = text.replace(entity[0], alias)
     print(f"Entity Dict: {entity_dict}" )
     text = ViTokenizer.tokenize(text)
+    for i in range(len(upper_indices)):
+        current_c = upper_indices[i]
+        current_str = text[:i+1]
+        current_index = current_c - count_character(text[:i+1], "_")
+        if current_index in upper_indices:
+            text = text[:current_index] + text[current_index].upper() + text[current_index+1:]
+    print(f"Processed Text: {text}")
+        
+        
+        
+    print(f"Tokenized Text: {text}")
     error_indices = []
+    # remove punctuation
+    for p in removed_punctuation:
+        text = text.replace(p, "")
     for i in range(len(text.split())):
         text = process_text(text)
         new_list = text.split()
         original_word = new_list[i]
         if is_number(original_word):
             continue
-        # if in entities, skip
+       
         if original_word in entity_dict.keys():
             oriname = entity_dict[original_word]
             # add _ to the word
@@ -150,7 +175,9 @@ def sentence_prediction(text, top_k=30):
         new_list[i] = tokenizer.mask_token
         masked_text = " ".join(new_list)
         start_time = time.time()
-        predictions = spell_pipeline(masked_text, top_k=100)
+        predictions = spell_pipeline(masked_text, top_k=30)
+        print(f"Masked Text: {masked_text}")
+        print(f"prediction: {predictions}")
         topk: list[Unknown] = []
         for i in range(len(predictions)):
             # lower the prediction
