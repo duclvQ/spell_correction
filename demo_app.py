@@ -176,7 +176,7 @@ class SpellCheckApp:
     
     def _display_sentence_with_errors(self, sentence, errors):
         """Display sentence with underlined misspelled words"""
-        from pyvi import ViTokenizer
+        # from pyvi import ViTokenizer
         
         # Tokenize the sentence to match the error indices
         # tokenized = ViTokenizer.tokenize(sentence)

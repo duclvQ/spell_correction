@@ -52,149 +52,139 @@ removed_punctuation = [
     "+", "-", "=", "~", "`"
 ]
 from name_checker import check_and_correct_word
-from transformers import AutoTokenizer, AutoModelForTokenClassification
+from transformers import AutoTokenizer, AutoModelForTokenClassification, AutoModel, AutoTokenizer, pipeline
 from transformers import pipeline
-
-
-ner_model_path = "NlpHUST/ner-vietnamese-electra-base"
-def get_raw_ner(model_path:str, query: str):
-    tokenizer = AutoTokenizer.from_pretrained(f"{model_path}")
-    model = AutoModelForTokenClassification.from_pretrained(f"{model_path}")
-    nlp = pipeline("ner", model=model, tokenizer=tokenizer)
-    ner_results = nlp(query)
-    return ner_results
-def extract_entities(ner_results):
-    entities = []
-    current_entity = ""
-    current_type = None
-
-
-    for item in ner_results:
-        ent_type = item['entity'].split('-')[-1]
-        if item['entity'].startswith('B-'):
-            if current_entity:
-                entities.append((current_entity.strip(), current_type))
-            current_entity = item['word']
-            current_type = ent_type
-        elif item['entity'].startswith('I-') and current_type == ent_type:
-            current_entity += " " + item['word']
-        else:
-            if current_entity:
-                entities.append((current_entity.strip(), current_type))
-            current_entity = ""
-            current_type = None
-
-    if current_entity:
-        entities.append((current_entity.strip(), current_type))
-
-    return entities
-
-
 from pyvi import ViTokenizer, ViPosTagger
 import time
 ViTokenizer.tokenize(u"Trường đại học bách khoa hà nội")
 import torch
-from transformers import AutoModel, AutoTokenizer
-from transformers import pipeline
-spell_pipeline = pipeline(
-    task="fill-mask",
-    model="bmd1905/vietnamese-correction-v2",
-    torch_dtype=torch.float16,
-    device=0
-)
-phobert = AutoModel.from_pretrained("vinai/phobert-base-v2")
-tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base-v2")
-def process_text(text):
-    for key, value in dict_map.items():
-        text = text.replace(key, value)
-    return text
-def is_number(s):
-    try:
-        float(s)
-        return True
-    except ValueError:
-        return False
-def extract_upper_case_indices(text):
-    upper_case_indices = []
-    for i, char in enumerate(text):
-        if char.isupper():
-            upper_case_indices.append(i)
-    return upper_case_indices
-def count_character(text, char):
-    return text.count(char)
-def sentence_prediction(text, top_k=30):
-    ner_results = get_raw_ner(ner_model_path, text)
-    
-    entities = extract_entities(ner_results)
-    upper_indices = extract_upper_case_indices(text)
-    # get entities
-    print(f"Entities: {entities}")
-    # create a dict the replace entities with an alias
-    entity_dict = {}
-    for idx, entity in enumerate(entities):
-        alias = f"người_{idx}"
-        entity_dict[alias] = entity[0]
-        text = text.replace(entity[0], alias)
-    print(f"Entity Dict: {entity_dict}" )
-    text = ViTokenizer.tokenize(text)
-    for i in range(len(upper_indices)):
-        current_c = upper_indices[i]
-        current_str = text[:i+1]
-        current_index = current_c - count_character(text[:i+1], "_")
-        if current_index in upper_indices:
-            text = text[:current_index] + text[current_index].upper() + text[current_index+1:]
-    print(f"Processed Text: {text}")
-        
-        
-        
-    print(f"Tokenized Text: {text}")
-    error_indices = []
-    # remove punctuation
-    for p in removed_punctuation:
-        text = text.replace(p, "")
-    for i in range(len(text.split())):
-        text = process_text(text)
-        new_list = text.split()
-        original_word = new_list[i]
-        if is_number(original_word):
-            continue
-       
-        if original_word in entity_dict.keys():
-            oriname = entity_dict[original_word]
-            # add _ to the word
-            oriname = oriname.replace(" ", "_").lower()
-            word, is_correct, suggestion = check_and_correct_word(oriname)
-            if is_correct:
-                continue
+
+class NER_Extractor:
+    def __init__(self):
+        self.ner_model_path = "NlpHUST/ner-vietnamese-electra-base"
+        self.tokenizer = AutoTokenizer.from_pretrained(self.ner_model_path)
+        self.model = AutoModelForTokenClassification.from_pretrained(self.ner_model_path)
+        self.nlp = pipeline("ner", model=self.model, tokenizer=self.tokenizer)
+    def __call__(self, query: str):
+        """Call the NER extractor"""
+        return self.extract_entities(self.get_raw_ner(query))
+
+    def get_raw_ner(self, query: str):
+        """Get raw NER results from the model"""
+        return self.nlp(query)
+    def extract_entities(self, ner_results):
+        entities = []
+        current_entity = ""
+        current_type = None
+
+
+        for item in ner_results:
+            ent_type = item['entity'].split('-')[-1]
+            if item['entity'].startswith('B-'):
+                if current_entity:
+                    entities.append((current_entity.strip(), current_type))
+                current_entity = item['word']
+                current_type = ent_type
+            elif item['entity'].startswith('I-') and current_type == ent_type:
+                current_entity += " " + item['word']
             else:
-                error_indices.append((i, oriname, suggestion))
-            print(f"Original Word: {original_word}")
-            continue
-        if "_" in original_word:
-            continue
-        new_list[i] = tokenizer.mask_token
-        masked_text = " ".join(new_list)
-        start_time = time.time()
-        predictions = spell_pipeline(masked_text, top_k=30)
-        print(f"Masked Text: {masked_text}")
-        print(f"prediction: {predictions}")
-        topk: list[Unknown] = []
-        for i in range(len(predictions)):
-            # lower the prediction
-            predictions[i]['token_str'] = predictions[i]['token_str'].lower()
-        for item in predictions:
-            if 'token_str' in item:
-                topk.append(item['token_str'])
-        end_time = time.time()
-        if original_word.lower() not in topk:
-            print(f"Original Word: {original_word}")
-            print(f"Masked Text: {masked_text}")
-            print(f"->Top 10 Predictions: {topk}")
-            error_indices.append((i, original_word, topk[0]))
-        # print(f"Masked Text: {masked_text}")
-    return error_indices
+                if current_entity:
+                    entities.append((current_entity.strip(), current_type))
+                current_entity = ""
+                current_type = None
+
+        if current_entity:
+            entities.append((current_entity.strip(), current_type))
+
+        return entities
+class VNese_WordSegmenter:
+    def __init__(self):
+        self.tokenizer = ViTokenizer
+
+    def __call__(self, text):
+        return self.tokenizer.tokenize(text)
+    
+class BertSpellChecker:
+    def __init__(self):
+        self.model_name = "bmd1905/vietnamese-correction-v2"
+        self.pipeline = pipeline(
+            task="fill-mask",
+            model=self.model_name,
+            tokenizer=self.model_name,
+            torch_dtype=torch.float16,
+            device=0
+        )
+        # phobert = AutoModel.from_pretrained("vinai/phobert-base-v2")
+        # tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base-v2")
+        self.ner_extractor = NER_Extractor()
+        self.segmenter = VNese_WordSegmenter()
+
+    def __call__(self, text):
+        return self.sentence_prediction(text)
+    def mask_entities(self, text, entities):
+        """Mask entities in the text with an alias"""
+        entity_dict = {}
+        for idx, entity in enumerate(entities):
+            alias = f"person_{idx}"
+            entity_dict[alias] = entity[0]
+            text = text.replace(entity[0], alias)
+        print(f"Entity Dict: {entity_dict}")
+        return text, entity_dict
+    def loop_mask(self, text, mask_token="<mask>", entities=None):
+        """Loop through the text and mask entities"""
+        words = text.split()
+        masked_text = []
+        data = []
+        entities_list = list(entities.keys()) if entities else []
+        for idx, word in enumerate(words):
+            if word in removed_punctuation or word in entities_list:
+                continue
+            # skip words with more then 2 phenoms
+            if "_" in word or len(word) < 2:
+                continue
+            masked_text = words[:idx] + [mask_token] + words[idx+1:]
+            masked_text = " ".join(masked_text)
+            data.append({
+                "text": masked_text,
+                "index": idx,
+                "word": word
+            })
+        return data
+            
+    def sentence_prediction(self, text, top_k=30):
+        entities = self.ner_extractor(text)
+
+        text, entity_dict = self.mask_entities(text, entities)
+    
+        segmented_text = self.segmenter(text)
+        print(f"Segmented Text: {segmented_text}")
+
+        list_of_segmented_words = segmented_text.split()
+        list_of_masked = self.loop_mask(segmented_text, mask_token="<mask>", entities=entity_dict)
+        err_list = []
+        for item in list_of_masked:
+            masked_text = item['text']
+            index = item['index']
+            word = item['word']
+            predictions = self.pipeline(masked_text, top_k=top_k)
+            if word.lower() not in [pred['token_str'].lower() for pred in predictions]:
+                err_list.append((index, word, predictions[0]['token_str']))
+                list_of_segmented_words[index] = f"*{word}*"
+
+        checked_text = " ".join(list_of_segmented_words)
+        for index, word, correction in err_list:
+            print(f"Error found at index {index}: {word} -> {correction}")
+        # inverser the entity masking
+        for alias, original in entity_dict.items():
+            checked_text = checked_text.replace(alias, original)
+        # remove underscores from the checked text
+        checked_text = checked_text.replace("_", " ")
+        return checked_text, err_list
 
 
-
-
-
+if __name__ == "__main__":
+    spell_checker = BertSpellChecker()
+    text = "Trường đại học bách khoa hà nội là một trường đại học hàng đầu tại Việt Nam."
+    corrected_text, errors = spell_checker(text)
+    print(f"Corrected Text: {corrected_text}")
+    print(f"Errors: {errors}")
