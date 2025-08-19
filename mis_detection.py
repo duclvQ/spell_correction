@@ -208,7 +208,7 @@ class BertSpellChecker:
 
 if __name__ == "__main__":
     spell_checker = BertSpellChecker()
-    text = """Thủ tướng Phạ Minh Chính cho rằng nhiều công trình khởi công ngày 19/8 sẽ trở thành biểu tượng mới, được thế giới ngưỡng mộ, mở thêm không gian văn hóa để nhân dân thụ hưởng.
+    text = """Thủ tướng Phạn Minh Chính cho rằng nhiều công trình khởi công ngày 19/8 sẽ trở thành biểu tượng mới, được thế giới ngưỡng mộ, mở thêm không gian văn hóa để nhân dân thụ hưởng.
 Phát biểu tại lễ khởi công và khánh thành 250 công trình, dự án trên cả nước sáng 19/8, Thủ tướng nhấn mạnh các dự án lần này có ý nghĩa chiến lược trong phát triển hạ tầng, tạo động lực thúc đẩy kinh tế - xã hội, đồng thời thu hút mạnh mẽ nguồn lực tư nhân.
 Trong tổng số 250 công trình, có 89 dự án được khánh thành với tổng vốn đầu tư khoảng 220.000 tỷ đồng, bao gồm 208 km đường cao tốc, nâng tổng chiều dài đường bộ cao tốc cả nước lên gần 2.500 km. Nhiều dự án quy mô lớn được đưa vào sử dụng như cầu Rạch Miễu 2, Nhà máy thủy điện Trị An mở rộng, Hòa Bình mở rộng, Bệnh viện Ung bướu Nghệ An 1.000 giường, trụ sở Bộ Công an và Trung tâm tài chính quốc tế Saigon Marina.
 """
