@@ -56,9 +56,17 @@ from transformers import AutoTokenizer, AutoModelForTokenClassification, AutoMod
 from transformers import pipeline
 from pyvi import ViTokenizer, ViPosTagger
 import time
-ViTokenizer.tokenize(u"Trường đại học bách khoa hà nội")
 import torch
 
+
+def is_number(s):
+    """Check if a string is a number"""
+    try:
+        float(s)
+        return True
+    except ValueError:
+        return False
+    
 class NER_Extractor:
     def __init__(self):
         self.ner_model_path = "NlpHUST/ner-vietnamese-electra-base"
@@ -94,8 +102,10 @@ class NER_Extractor:
                 current_type = None
 
         if current_entity:
+            
             entities.append((current_entity.strip(), current_type))
-
+        # get only person entities
+        # entities = [ent for ent in entities if ent[1] == 'PERSON']
         return entities
 class VNese_WordSegmenter:
     def __init__(self):
@@ -106,7 +116,7 @@ class VNese_WordSegmenter:
     
 class BertSpellChecker:
     def __init__(self):
-        self.model_name = "bmd1905/vietnamese-correction-v2"
+        self.model_name = "vinai/phobert-base-v2"
         self.pipeline = pipeline(
             task="fill-mask",
             model=self.model_name,
@@ -125,7 +135,9 @@ class BertSpellChecker:
         """Mask entities in the text with an alias"""
         entity_dict = {}
         for idx, entity in enumerate(entities):
-            alias = f"person_{idx}"
+            if entity[1] != 'PERSON':
+                continue
+            alias = f"người_{idx}"
             entity_dict[alias] = entity[0]
             text = text.replace(entity[0], alias)
         print(f"Entity Dict: {entity_dict}")
@@ -151,7 +163,7 @@ class BertSpellChecker:
             })
         return data
             
-    def sentence_prediction(self, text, top_k=30):
+    def sentence_prediction(self, text, top_k=200):
         entities = self.ner_extractor(text)
 
         text, entity_dict = self.mask_entities(text, entities)
@@ -166,14 +178,26 @@ class BertSpellChecker:
             masked_text = item['text']
             index = item['index']
             word = item['word']
+            # skip if the word is already in the entity list
+            if word in [entity[0] for entity in entities]:
+                continue
+            # skip if the word is a number
+            if is_number(word):
+                continue
             predictions = self.pipeline(masked_text, top_k=top_k)
             if word.lower() not in [pred['token_str'].lower() for pred in predictions]:
                 err_list.append((index, word, predictions[0]['token_str']))
                 list_of_segmented_words[index] = f"*{word}*"
-
+                print(f"masked_text: {masked_text}, index: {index}, word: {word}, prediction: {predictions[0]['token_str']}")
         checked_text = " ".join(list_of_segmented_words)
         for index, word, correction in err_list:
             print(f"Error found at index {index}: {word} -> {correction}")
+        for alias, name in entity_dict.items():
+            word, is_correct, correction = check_and_correct_word(name)
+            print(f"Checking word: {name}, Corrected: {word}, Is Correct: {is_correct}, Suggestion: {correction}")
+            if not is_correct:
+                
+                checked_text = checked_text.replace(alias, f"*{name}*")
         # inverser the entity masking
         for alias, original in entity_dict.items():
             checked_text = checked_text.replace(alias, original)
@@ -184,7 +208,11 @@ class BertSpellChecker:
 
 if __name__ == "__main__":
     spell_checker = BertSpellChecker()
-    text = "Trường đại học bách khoa hà nội là một trường đại học hàng đầu tại Việt Nam."
+    text = """Thủ tướng Phạ Minh Chính cho rằng nhiều công trình khởi công ngày 19/8 sẽ trở thành biểu tượng mới, được thế giới ngưỡng mộ, mở thêm không gian văn hóa để nhân dân thụ hưởng.
+Phát biểu tại lễ khởi công và khánh thành 250 công trình, dự án trên cả nước sáng 19/8, Thủ tướng nhấn mạnh các dự án lần này có ý nghĩa chiến lược trong phát triển hạ tầng, tạo động lực thúc đẩy kinh tế - xã hội, đồng thời thu hút mạnh mẽ nguồn lực tư nhân.
+Trong tổng số 250 công trình, có 89 dự án được khánh thành với tổng vốn đầu tư khoảng 220.000 tỷ đồng, bao gồm 208 km đường cao tốc, nâng tổng chiều dài đường bộ cao tốc cả nước lên gần 2.500 km. Nhiều dự án quy mô lớn được đưa vào sử dụng như cầu Rạch Miễu 2, Nhà máy thủy điện Trị An mở rộng, Hòa Bình mở rộng, Bệnh viện Ung bướu Nghệ An 1.000 giường, trụ sở Bộ Công an và Trung tâm tài chính quốc tế Saigon Marina.
+"""
+
     corrected_text, errors = spell_checker(text)
     print(f"Corrected Text: {corrected_text}")
     print(f"Errors: {errors}")
