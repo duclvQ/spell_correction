@@ -1,3 +1,6 @@
+from transformers.models.canine.tokenization_canine import MASK
+import numpy as np
+import time 
 TXT = "Trung tâm Dự báo Khí tượng Thủy văn quốc gia cho biết lúc 7h hôm na, áp thấp nhiệt đới mạnh 61 km/h, cấp 6-7,"
 # replace uỷ with ủy
 dict_map = {
@@ -51,6 +54,50 @@ removed_punctuation = [
     "!", "?", ".", ",", ";", ":", "'", '"', "(", ")", "[", "]", "{", "}", "<", ">", "/", "\\", "|", "@", "#", "$", "%", "^", "&", "*",
     "+", "-", "=", "~", "`"
 ]
+
+MASK_TOKEN = "[MASK]"
+MASK_TOKEN = "<mask>"
+import torch
+
+def fast_fill_mask(self, masked_text, top_k=1000, top_p=0.975):
+    # raw model + tokenizer
+    tokenizer = self.pipeline.tokenizer
+    model = self.pipeline.model
+
+    # tokenize
+    inputs = tokenizer(masked_text, return_tensors="pt")
+    with torch.no_grad():
+        logits = model(**inputs).logits
+
+    # find mask position
+    mask_idx = (inputs.input_ids[0] == tokenizer.mask_token_id).nonzero(as_tuple=True)[0]
+
+    # probs for the mask
+    probs = torch.softmax(logits[0, mask_idx], dim=-1).squeeze(0)
+
+    # only take top_k (faster than sorting all vocab)
+    probs_top, idxs = torch.topk(probs, k=top_k)
+    tokens = tokenizer.convert_ids_to_tokens(idxs)
+
+    # build prediction dicts (like pipeline does)
+    predictions = [
+        {"token_str": tok, "score": float(score), "token": int(idx)}
+        for tok, score, idx in zip(tokens, probs_top, idxs)
+    ]
+
+    # apply your nucleus (top_p) + "_" filtering
+    filtered = []
+    cum_p = 0.0
+    for pred in predictions:
+        if "_" in pred["token_str"]:
+            continue
+        cum_p += pred["score"]
+        filtered.append(pred)
+        if cum_p >= top_p:
+            break
+
+    return filtered
+
 from name_checker import check_and_correct_word
 from transformers import AutoTokenizer, AutoModelForTokenClassification, AutoModel, AutoTokenizer, pipeline
 from transformers import pipeline
@@ -58,7 +105,26 @@ from pyvi import ViTokenizer, ViPosTagger
 import time
 import torch
 
+def filter_top_p(predictions, probs, top_p=0.975, topk=1000):
+    # Convert to numpy for speed
+    probs = np.array(probs)
 
+    # take only topk first (assuming already sorted descending)
+    probs = probs[:topk]
+    preds = predictions[:topk]
+
+    # mask out tokens with "_"
+    mask = np.array(["_" not in pred['token_str'] for pred in preds])
+    probs = probs[mask]
+    preds = [p for p, keep in zip(preds, mask) if keep]
+
+    # cumulative sum
+    cum_probs = np.cumsum(probs)
+
+    # find cutoff index
+    cutoff = np.searchsorted(cum_probs, top_p)
+
+    return preds[:cutoff+1]
 def is_number(s):
     """Check if a string is a number"""
     try:
@@ -113,7 +179,154 @@ class VNese_WordSegmenter:
 
     def __call__(self, text):
         return self.tokenizer.tokenize(text)
+class VietnameseWordSegmenter:
+    """
+    A class for Vietnamese word segmentation using transformers.
     
+    This class provides methods to segment Vietnamese text into words,
+    handling subword tokens and word boundaries properly.
+    """
+    
+    def __init__(self, model_name="NlpHUST/vi-word-segmentation"):
+        """
+        Initialize the Vietnamese Word Segmenter.
+        
+        Args:
+            model_name (str): The name of the pre-trained model to use.
+                            Default is "NlpHUST/vi-word-segmentation"
+        """
+        print(f"Loading Vietnamese Word Segmentation model: {model_name}")
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModelForTokenClassification.from_pretrained(model_name)
+        self.pipeline = pipeline("token-classification", 
+                                model=self.model, 
+                                tokenizer=self.tokenizer)
+        print("Model loaded successfully!")
+    
+    def segment(self, text):
+        """
+        Segment Vietnamese text into words.
+        
+        Args:
+            text (str): The Vietnamese text to segment
+            
+        Returns:
+            str: The segmented text with words separated by spaces and 
+                 compound words connected by underscores
+        """
+        if not text or not text.strip():
+            return ""
+        
+        # Get token classification results
+        ner_results = self.pipeline(text.strip())
+        
+        # Process the results to create segmented text
+        segmented_text = self._process_tokens(ner_results)
+        
+        return segmented_text.strip()
+    
+    def _process_tokens(self, ner_results):
+        """
+        Process the token classification results to create segmented text.
+        
+        Args:
+            ner_results (list): List of token classification results
+            
+        Returns:
+            str: Processed segmented text
+        """
+        segmented_text = ""
+        
+        for token_info in ner_results:
+            word = token_info["word"]
+            entity = token_info["entity"]
+            
+            if "##" in word:
+                # Handle subword tokens (remove ## prefix)
+                segmented_text += word.replace("##", "")
+            elif entity == "I":
+                # Inside entity - connect with underscore
+                segmented_text += "_" + word
+            else:
+                # Beginning of entity or outside entity - add space
+                segmented_text += " " + word
+        
+        return segmented_text
+    
+    def segment_batch(self, texts):
+        """
+        Segment multiple texts at once.
+        
+        Args:
+            texts (list): List of Vietnamese texts to segment
+            
+        Returns:
+            list: List of segmented texts
+        """
+        return [self.segment(text) for text in texts]
+    
+    def get_word_boundaries(self, text):
+        """
+        Get detailed word boundary information.
+        
+        Args:
+            text (str): The Vietnamese text to analyze
+            
+        Returns:
+            list: List of dictionaries containing word information
+        """
+        if not text or not text.strip():
+            return []
+        
+        ner_results = self.pipeline(text.strip())
+        word_info = []
+        current_word = ""
+        current_start = 0
+        
+        for i, token_info in enumerate(ner_results):
+            word = token_info["word"]
+            entity = token_info["entity"]
+            start = token_info.get("start", 0)
+            end = token_info.get("end", 0)
+            
+            if "##" in word:
+                current_word += word.replace("##", "")
+            elif entity == "I":
+                current_word += "_" + word
+            else:
+                # Save previous word if exists
+                if current_word:
+                    word_info.append({
+                        "word": current_word.strip(),
+                        "start": current_start,
+                        "end": end
+                    })
+                
+                # Start new word
+                current_word = word
+                current_start = start
+        
+        # Add the last word
+        if current_word:
+            word_info.append({
+                "word": current_word.strip(),
+                "start": current_start,
+                "end": ner_results[-1].get("end", len(text)) if ner_results else len(text)
+            })
+        
+        return word_info
+    
+    def __call__(self, text):
+        """
+        Make the class callable - same as segment method.
+        
+        Args:
+            text (str): The Vietnamese text to segment
+            
+        Returns:
+            str: The segmented text
+        """
+        return self.segment(text) 
 class BertSpellChecker:
     def __init__(self):
         self.model_name = "vinai/phobert-base-v2"
@@ -121,13 +334,13 @@ class BertSpellChecker:
             task="fill-mask",
             model=self.model_name,
             tokenizer=self.model_name,
-            torch_dtype=torch.float16,
+            torch_dtype=torch.float32,
             device=0
         )
         # phobert = AutoModel.from_pretrained("vinai/phobert-base-v2")
         # tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base-v2")
         self.ner_extractor = NER_Extractor()
-        self.segmenter = VNese_WordSegmenter()
+        self.segmenter = VietnameseWordSegmenter()
 
     def __call__(self, text):
         return self.sentence_prediction(text)
@@ -137,12 +350,13 @@ class BertSpellChecker:
         for idx, entity in enumerate(entities):
             if entity[1] != 'PERSON':
                 continue
-            alias = f"người_{idx}"
+            # alias = f"người_{idx}"
+            alias = entity[0]
             entity_dict[alias] = entity[0]
             text = text.replace(entity[0], alias)
         print(f"Entity Dict: {entity_dict}")
         return text, entity_dict
-    def loop_mask(self, text, mask_token="<mask>", entities=None):
+    def loop_mask(self, text, mask_token="[MASK]", entities=None):
         """Loop through the text and mask entities"""
         words = text.split()
         masked_text = []
@@ -163,7 +377,7 @@ class BertSpellChecker:
             })
         return data
             
-    def sentence_prediction(self, text, top_k=200):
+    def sentence_prediction(self, text, top_k=500):
         entities = self.ner_extractor(text)
 
         text, entity_dict = self.mask_entities(text, entities)
@@ -172,7 +386,7 @@ class BertSpellChecker:
         print(f"Segmented Text: {segmented_text}")
 
         list_of_segmented_words = segmented_text.split()
-        list_of_masked = self.loop_mask(segmented_text, mask_token="<mask>", entities=entity_dict)
+        list_of_masked = self.loop_mask(segmented_text, mask_token=MASK_TOKEN, entities=entity_dict)
         err_list = []
         for item in list_of_masked:
             masked_text = item['text']
@@ -184,20 +398,45 @@ class BertSpellChecker:
             # skip if the word is a number
             if is_number(word):
                 continue
+        
+            skip = False
+            start_time = time.time()
             predictions = self.pipeline(masked_text, top_k=top_k)
+            
+            print(f"Pipeline took {time.time() - start_time:.2f} seconds")
+            # print(f"Predictions for masked text '{masked_text}': {predictions}")
+            probs = [pred['score'] for pred in predictions]
+            # get only top_p = 0.95
+            start_time = time.time()
+            filtered_predictions = filter_top_p(predictions, probs, top_p=0.975, topk=top_k)
+            end_time = time.time()
+            print(f"Filtering took {end_time - start_time:.2f} seconds")
+            predictions = filtered_predictions
             if word.lower() not in [pred['token_str'].lower() for pred in predictions]:
-                err_list.append((index, word, predictions[0]['token_str']))
+                # check if it in the suggestion
+                for pred in predictions:
+                    if word.lower() in pred['token_str'].lower().split("_"):
+                        skip = True
+                if skip:
+                    continue
+                suggestion = ["".join(predictions[i]['token_str']) for i in range(1)]
+                err_list.append((index, word, suggestion))
                 list_of_segmented_words[index] = f"*{word}*"
                 print(f"masked_text: {masked_text}, index: {index}, word: {word}, prediction: {predictions[0]['token_str']}")
+        
         checked_text = " ".join(list_of_segmented_words)
         for index, word, correction in err_list:
             print(f"Error found at index {index}: {word} -> {correction}")
         for alias, name in entity_dict.items():
             word, is_correct, correction = check_and_correct_word(name)
+            # upper first phenon
+            word_list = [word.capitalize() for word in name.split("_")]
+            word = " ".join(word_list)
             print(f"Checking word: {name}, Corrected: {word}, Is Correct: {is_correct}, Suggestion: {correction}")
             if not is_correct:
-                
-                checked_text = checked_text.replace(alias, f"*{name}*")
+                under_name = name.replace(" ", "_")
+                checked_text = checked_text.replace(under_name, f"*{name}*")
+                err_list.append((0, name, correction))
         # inverser the entity masking
         for alias, original in entity_dict.items():
             checked_text = checked_text.replace(alias, original)
