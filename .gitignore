@@ -1,3 +1,7 @@
 # ignore a folder
 corpus.viwiki/
 **/*.txt
+**/*/json
+# dont ignore these files
+!vi_freq_dict.txt
+!freq_list_results.json

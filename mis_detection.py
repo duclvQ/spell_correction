@@ -98,7 +98,7 @@ def fast_fill_mask(self, masked_text, top_k=1000, top_p=0.975):
 
     return filtered
 
-from name_checker import check_and_correct_word
+from name_checker import check_and_correct_word, spell_check_one_word
 from transformers import AutoTokenizer, AutoModelForTokenClassification, AutoModel, AutoTokenizer, pipeline
 from transformers import pipeline
 from pyvi import ViTokenizer, ViPosTagger
@@ -340,7 +340,8 @@ class BertSpellChecker:
         # phobert = AutoModel.from_pretrained("vinai/phobert-base-v2")
         # tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base-v2")
         self.ner_extractor = NER_Extractor()
-        self.segmenter = VietnameseWordSegmenter()
+        self.segmenter_1 = VietnameseWordSegmenter()
+        self.segmenter_2 = VNese_WordSegmenter()
 
     def __call__(self, text):
         return self.sentence_prediction(text)
@@ -355,6 +356,7 @@ class BertSpellChecker:
             entity_dict[alias] = entity[0]
             text = text.replace(entity[0], alias)
         print(f"Entity Dict: {entity_dict}")
+
         return text, entity_dict
     def loop_mask(self, text, mask_token="[MASK]", entities=None):
         """Loop through the text and mask entities"""
@@ -381,8 +383,12 @@ class BertSpellChecker:
         entities = self.ner_extractor(text)
 
         text, entity_dict = self.mask_entities(text, entities)
-    
-        segmented_text = self.segmenter(text)
+        lower_text = text.lower()
+        segmented_text_1 = self.segmenter_1(text)
+        segmented_text_2 = self.segmenter_2(text)
+        # keep only the same word in segmented text, otherwise, split into single words
+
+        segmented_text  = segmented_text_2
         print(f"Segmented Text: {segmented_text}")
 
         list_of_segmented_words = segmented_text.split()
@@ -392,6 +398,13 @@ class BertSpellChecker:
             masked_text = item['text']
             index = item['index']
             word = item['word']
+            word, is_correct_one_word, correction = spell_check_one_word(word)
+            if not is_correct_one_word:
+                # If the word is not correct, add it to the error list
+                print("====found error ====")
+                print(f"Word: {word}, Correction: {correction}")
+                err_list.append((index, word, correction))
+                continue 
             # skip if the word is already in the entity list
             if word in [entity[0] for entity in entities]:
                 continue
@@ -401,14 +414,15 @@ class BertSpellChecker:
         
             skip = False
             start_time = time.time()
-            predictions = self.pipeline(masked_text, top_k=top_k)
+            print("input", masked_text.lower())
+            predictions = self.pipeline(masked_text.lower(), top_k=top_k)
             
             print(f"Pipeline took {time.time() - start_time:.2f} seconds")
             # print(f"Predictions for masked text '{masked_text}': {predictions}")
             probs = [pred['score'] for pred in predictions]
             # get only top_p = 0.95
             start_time = time.time()
-            filtered_predictions = filter_top_p(predictions, probs, top_p=0.975, topk=top_k)
+            filtered_predictions = filter_top_p(predictions, probs, top_p=0.9, topk=top_k)
             end_time = time.time()
             print(f"Filtering took {end_time - start_time:.2f} seconds")
             predictions = filtered_predictions
