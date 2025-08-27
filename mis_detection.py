@@ -51,9 +51,14 @@ dict_map = {
     "ỤY": "UỴ",
     }
 removed_punctuation = [
-    "!", "?", ".", ",", ";", ":", "'", '"', "(", ")", "[", "]", "{", "}", "<", ">", "/", "\\", "|", "@", "#", "$", "%", "^", "&", "*",
+    ",", "!", "?", ".", ";", ":", "'", '"', "(", ")", "[", "]", "{", "}", "<", ">", "/", "\\", "|", "@", "#", "$", "%", "^", "&", "*",
     "+", "-", "=", "~", "`"
 ]
+def remove_punctuation(text):
+    """Remove punctuation from the text"""
+    for punct in removed_punctuation:
+        text = text.replace(punct, "")
+    return text
 
 MASK_TOKEN = "[MASK]"
 MASK_TOKEN = "<mask>"
@@ -98,7 +103,7 @@ def fast_fill_mask(self, masked_text, top_k=1000, top_p=0.975):
 
     return filtered
 
-from name_checker import check_and_correct_word, spell_check_one_word
+from name_checker import check_and_correct_word, spell_check_word
 from transformers import AutoTokenizer, AutoModelForTokenClassification, AutoModel, AutoTokenizer, pipeline
 from transformers import pipeline
 from pyvi import ViTokenizer, ViPosTagger
@@ -368,8 +373,8 @@ class BertSpellChecker:
             if word in removed_punctuation or word in entities_list:
                 continue
             # skip words with more then 2 phenoms
-            if "_" in word or len(word) < 2:
-                continue
+            # if "_" in word or len(word) < 2:
+            #     continue
             masked_text = words[:idx] + [mask_token] + words[idx+1:]
             masked_text = " ".join(masked_text)
             data.append({
@@ -379,30 +384,46 @@ class BertSpellChecker:
             })
         return data
             
-    def sentence_prediction(self, text, top_k=500):
+    def sentence_prediction(self, text, top_k=200):
+        err_list = []
+        # upper_indices 
+        upper_indices = [i for i, c in enumerate(text) if c.isupper()]
+        # first check
+        for word in text.split(" "):
+            word, is_correct_word, suggestion = spell_check_word(word)
+            if not is_correct_word:
+                word = remove_punctuation(word).lower()
+                err_list.append((0, word, suggestion))
+
+
         entities = self.ner_extractor(text)
 
         text, entity_dict = self.mask_entities(text, entities)
-        lower_text = text.lower()
+        # lower_text = text.lower()
         segmented_text_1 = self.segmenter_1(text)
-        segmented_text_2 = self.segmenter_2(text)
+        # segmented_text_2 = self.segmenter_2(text)
         # keep only the same word in segmented text, otherwise, split into single words
 
-        segmented_text  = segmented_text_2
+        segmented_text  = segmented_text_1
         print(f"Segmented Text: {segmented_text}")
-
+        # applay Uppercase after segmenting
+        
         list_of_segmented_words = segmented_text.split()
         list_of_masked = self.loop_mask(segmented_text, mask_token=MASK_TOKEN, entities=entity_dict)
-        err_list = []
         for item in list_of_masked:
             masked_text = item['text']
+            print(f"Masked Text: {masked_text}")
             index = item['index']
             word = item['word']
-            word, is_correct_one_word, correction = spell_check_one_word(word)
-            if not is_correct_one_word:
+            word, is_correct_word, correction = spell_check_word(word)
+            entities_lower = [entity[0] for entity in entities]
+            if word.replace("_", " ") in entities_lower:
+                continue
+            if not is_correct_word:
                 # If the word is not correct, add it to the error list
                 print("====found error ====")
                 print(f"Word: {word}, Correction: {correction}")
+                word = word.strip().replace("_", " ")
                 err_list.append((index, word, correction))
                 continue 
             # skip if the word is already in the entity list
@@ -414,7 +435,7 @@ class BertSpellChecker:
         
             skip = False
             start_time = time.time()
-            print("input", masked_text.lower())
+            # print("input", masked_text)
             predictions = self.pipeline(masked_text.lower(), top_k=top_k)
             
             print(f"Pipeline took {time.time() - start_time:.2f} seconds")
@@ -422,18 +443,20 @@ class BertSpellChecker:
             probs = [pred['score'] for pred in predictions]
             # get only top_p = 0.95
             start_time = time.time()
-            filtered_predictions = filter_top_p(predictions, probs, top_p=0.9, topk=top_k)
+            filtered_predictions = filter_top_p(predictions, probs, top_p=0.95, topk=top_k)
             end_time = time.time()
             print(f"Filtering took {end_time - start_time:.2f} seconds")
             predictions = filtered_predictions
             if word.lower() not in [pred['token_str'].lower() for pred in predictions]:
+                if "_" in word:
+                    continue
                 # check if it in the suggestion
                 for pred in predictions:
                     if word.lower() in pred['token_str'].lower().split("_"):
                         skip = True
                 if skip:
                     continue
-                suggestion = ["".join(predictions[i]['token_str']) for i in range(1)]
+                suggestion = predictions[0]['token_str']
                 err_list.append((index, word, suggestion))
                 list_of_segmented_words[index] = f"*{word}*"
                 print(f"masked_text: {masked_text}, index: {index}, word: {word}, prediction: {predictions[0]['token_str']}")
@@ -456,7 +479,18 @@ class BertSpellChecker:
             checked_text = checked_text.replace(alias, original)
         # remove underscores from the checked text
         checked_text = checked_text.replace("_", " ")
-        return checked_text, err_list
+        print('err_list',err_list)
+        final_error_list = []
+        split_original_text = text.split(" ")
+        for i, word in enumerate(split_original_text):
+            for _err in err_list:
+                _, err, sugg = _err
+                if type(sugg) == list:
+                    sugg = sugg[0]
+                if " ".join(split_original_text[i: i+ len(err.split(" "))]).lower() == err:
+                    final_error_list.append((i, " ".join(split_original_text[i: i+ len(err.split(" "))]), sugg.replace(" ", "_")))
+
+        return checked_text, final_error_list
 
 
 if __name__ == "__main__":
