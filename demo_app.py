@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, scrolledtext
 import threading
-from mis_detection import sentence_prediction
+from recycle_bin.mis_detection import sentence_prediction
 import re 
 import unicodedata
 import copy

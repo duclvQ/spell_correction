@@ -5,7 +5,7 @@ from symspellpy import SymSpell, Verbosity
 from symspellpy import SymSpell, Verbosity
 sym_spell = SymSpell(max_dictionary_edit_distance=4, prefix_length=7)
 dictionary_path = "new_name_dict.txt"
-sym_spell.load_dictionary(dictionary_path, term_index=0, count_index=1)
+sym_spell.load_dictionary(dictionary_path, term_index=0, count_index=1, encoding="utf-8")
 
 def is_startwith_upper(word):
     """Check if the word starts with an uppercase letter"""
@@ -29,7 +29,7 @@ def check_and_correct_word(word):
 
 sym_one_word = SymSpell(max_dictionary_edit_distance=3, prefix_length=7)
 one_word_dict = "vi_freq_dict.txt"
-sym_one_word.load_dictionary(one_word_dict, term_index=0, count_index=1)
+sym_one_word.load_dictionary(one_word_dict, term_index=0, count_index=1, encoding="utf-8")
 
 
 
