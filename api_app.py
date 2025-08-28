@@ -110,97 +110,91 @@ async def index():
     """Serve the web interface"""
     html_content = """
     <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Vietnamese Spell Checker API</title>
-        <style>
-            body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-            .container { background: #f5f5f5; padding: 20px; border-radius: 8px; }
-            textarea { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; }
-            button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
-            button:hover { background: #0056b3; }
-            .result { margin-top: 20px; padding: 15px; background: white; border-radius: 4px; }
-            .error { color: red; }
-            .success { color: green; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>Vietnamese Spell Checker API</h1>
-            <p>Enter Vietnamese text to check for spelling errors:</p>
-            
-            <textarea id="inputText" rows="6" placeholder="Enter your Vietnamese text here...">
-Tổng bí thư Tôn Lâm và thủ tướng nguyễn Minh Chính có bài phát biểu tại hội nghị chuyển đổi số quốc gia của Việt Nam
-            </textarea>
-            
-            <button onclick="checkSpelling()">Check Spelling</button>
-            
-            <div id="result" class="result" style="display: none;"></div>
-        </div>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vietnamese Spell Checker API</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .container { background: #f5f5f5; padding: 20px; border-radius: 8px; }
+        textarea { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; }
+        button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .result { margin-top: 20px; padding: 15px; background: white; border-radius: 4px; }
+        .error { color: red; }
+        .success { color: green; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Vietnamese Spell Checker API</h1>
+        <p>Enter Vietnamese text to check for spelling errors:</p>
         
-        <script>
-        async function checkSpelling() {
-            const inputText = document.getElementById('inputText').value.trim();
-            const resultDiv = document.getElementById('result');
+        <textarea id="inputText" rows="6" placeholder="Enter your Vietnamese text here...">
+Trun tâm Dự báo Khí tượng Thủy văn quốc gia cho biết lúc 7h hôm na, áp thấp nhiệt đới mạnh 61 km/h, cấp 6-7,
+        </textarea>
+        
+        <button onclick="checkSpelling()">Check Spelling</button>
+        
+        <div id="result" class="result" style="display: none;"></div>
+    </div>
+    
+    <script>
+    async function checkSpelling() {
+        const inputText = document.getElementById('inputText').value.trim();
+        const resultDiv = document.getElementById('result');
+        
+        if (!inputText) {
+            resultDiv.innerHTML = '<p class="error">Please enter some text to check.</p>';
+            resultDiv.style.display = 'block';
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/check', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    text: inputText
+                })
+            });
             
-            if (!inputText) {
-                resultDiv.innerHTML = '<p class="error">Please enter some text to check.</p>';
-                resultDiv.style.display = 'block';
-                return;
-            }
+            const result = await response.json();
             
-            try {
-                const response = await fetch('/api/check', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        text: inputText
-                    })
-                });
+            if (result.status === 'success') {
+                let html = '<h3>Results:</h3>';
+                html += `<p><strong>Original:</strong> ${result.original_text}</p>`;
+                html += `<p><strong>Suggested sentence:</strong> ${result.new_text}</p>`;
                 
-                const result = await response.json();
-                
-                if (result.status === 'success') {
-                    let html = '<h3>Results:</h3>';
-                    html += `<p><strong>Original:</strong> ${result.original_text}</p>`;
-                    html += `<p><strong>Corrected:</strong> ${result.corrected_text}</p>`;
-                    html += `<p><strong>Total errors found:</strong> ${result.total_errors}</p>`;
-                    
-                    if (result.sentences && result.sentences.length > 0) {
-                        html += '<h4>Details:</h4>';
-                        result.sentences.forEach((sentence, index) => {
-                            if (sentence.has_errors) {
-                                html += `<p><strong>Sentence ${index + 1}:</strong> ${sentence.errors.length} error(s)</p>`;
-                                sentence.errors.forEach(error => {
-                                    html += `<p style="margin-left: 20px;">• "${error.original_word}" → "${error.suggestion}"</p>`;
-                                });
-                            }
-                        });
-                    }
-                    
-                    resultDiv.innerHTML = html;
-                    resultDiv.className = 'result success';
-                } else {
-                    resultDiv.innerHTML = `<p class="error">Error: ${result.message}</p>`;
-                    resultDiv.className = 'result error';
+                if (result.replacement && result.replacement.length > 0) {
+                    html += '<h4>Replacements:</h4>';
+                    result.replacement.forEach(error => {
+                        html += `<p style="margin-left: 20px;">• "${error.orig}" → "${error.repl}"</p>`;
+                    });
                 }
                 
-                resultDiv.style.display = 'block';
-                
-            } catch (error) {
-                resultDiv.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+                resultDiv.innerHTML = html;
+                resultDiv.className = 'result success';
+            } else {
+                resultDiv.innerHTML = `<p class="error">Error: ${result.message}</p>`;
                 resultDiv.className = 'result error';
-                resultDiv.style.display = 'block';
             }
+            
+            resultDiv.style.display = 'block';
+            
+        } catch (error) {
+            resultDiv.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+            resultDiv.className = 'result error';
+            resultDiv.style.display = 'block';
         }
-        </script>
-    </body>
-    </html>
-    """
+    }
+    </script>
+</body>
+</html>
+"""
     return HTMLResponse(content=html_content)
 
 @app.post("/api/check", response_model=SpellCheckResponse)
