@@ -389,11 +389,7 @@ class BertSpellChecker:
         # upper_indices 
         upper_indices = [i for i, c in enumerate(text) if c.isupper()]
         # first check
-        for word in text.split(" "):
-            word, is_correct_word, suggestion = spell_check_word(word)
-            if not is_correct_word:
-                word = remove_punctuation(word).lower()
-                err_list.append((0, word, suggestion))
+        
 
 
         entities = self.ner_extractor(text)
@@ -403,9 +399,14 @@ class BertSpellChecker:
         segmented_text_1 = self.segmenter_1(text)
         # segmented_text_2 = self.segmenter_2(text)
         # keep only the same word in segmented text, otherwise, split into single words
-
+        for word in segmented_text_1.split(" "):
+            word, is_correct_word, suggestion = spell_check_word(word)
+            if not is_correct_word:
+                word = remove_punctuation(word).lower()
+                print(f"error in first phase: {word} -> {suggestion}")
+                err_list.append((-1, word, suggestion))
         segmented_text  = segmented_text_1
-        print(f"Segmented Text: {segmented_text}")
+        # print(f"Segmented Text: {segmented_text}")
         # applay Uppercase after segmenting
         
         list_of_segmented_words = segmented_text.split()
@@ -415,6 +416,8 @@ class BertSpellChecker:
             print(f"Masked Text: {masked_text}")
             index = item['index']
             word = item['word']
+            if "_" in word: 
+                continue
             word, is_correct_word, correction = spell_check_word(word)
             entities_lower = [entity[0] for entity in entities]
             if word.replace("_", " ") in entities_lower:
@@ -422,9 +425,12 @@ class BertSpellChecker:
             if not is_correct_word:
                 # If the word is not correct, add it to the error list
                 print("====found error ====")
+                
+                print(f"error in bert phase: {word} -> {suggestion}")
+                
                 print(f"Word: {word}, Correction: {correction}")
                 word = word.strip().replace("_", " ")
-                err_list.append((index, word, correction))
+                err_list.append((index, word, "_"))
                 continue 
             # skip if the word is already in the entity list
             if word in [entity[0] for entity in entities]:
@@ -445,7 +451,7 @@ class BertSpellChecker:
             start_time = time.time()
             filtered_predictions = filter_top_p(predictions, probs, top_p=0.95, topk=top_k)
             end_time = time.time()
-            print(f"Filtering took {end_time - start_time:.2f} seconds")
+            # print(f"Filtering took {end_time - start_time:.2f} seconds")
             predictions = filtered_predictions
             if word.lower() not in [pred['token_str'].lower() for pred in predictions]:
                 if "_" in word:
@@ -456,14 +462,24 @@ class BertSpellChecker:
                         skip = True
                 if skip:
                     continue
-                suggestion = predictions[0]['token_str']
-                err_list.append((index, word, suggestion))
-                list_of_segmented_words[index] = f"*{word}*"
-                print(f"masked_text: {masked_text}, index: {index}, word: {word}, prediction: {predictions[0]['token_str']}")
+                max_suggestion = 5
+                sugg_text = ""
+                for s in predictions[:max_suggestion]:
+                    sugg_text += f"{s['token_str']}*"
+                sugg_text = sugg_text.rstrip("*")
+                print("suggestion_0:", sugg_text)
+
+                # skip if word is in the  err_list
+                if (index, word, sugg_text) in err_list:
+                    continue
+                err_list.append((index, word, sugg_text))
+                # list_of_segmented_words[index] = f"*{word}*"
+                # print(f"masked_text: {masked_text}, index: {index}, word: {word}, prediction: {predictions[0]['token_str']}")
         
         checked_text = " ".join(list_of_segmented_words)
         for index, word, correction in err_list:
-            print(f"Error found at index {index}: {word} -> {correction}")
+            pass
+            # print(f"Error found at index {index}: {word} -> {correction}")
         for alias, name in entity_dict.items():
             word, is_correct, correction = check_and_correct_word(name)
             # upper first phenon
@@ -474,6 +490,9 @@ class BertSpellChecker:
                 under_name = name.replace(" ", "_")
                 checked_text = checked_text.replace(under_name, f"*{name}*")
                 err_list.append((0, name, correction))
+                
+                
+                
         # inverser the entity masking
         for alias, original in entity_dict.items():
             checked_text = checked_text.replace(alias, original)
@@ -481,15 +500,25 @@ class BertSpellChecker:
         checked_text = checked_text.replace("_", " ")
         print('err_list',err_list)
         final_error_list = []
+        
+        
+        
+        # get final results
         split_original_text = text.split(" ")
         for i, word in enumerate(split_original_text):
             for _err in err_list:
                 _, err, sugg = _err
+                # if sugg in ["</s>", "<s>"]:
+                #     continue
                 if type(sugg) == list:
-                    sugg = sugg[0]
+                    sugg = "*".join(sugg[:5])
+                if err.isdigit():
+                    continue
                 if " ".join(split_original_text[i: i+ len(err.split(" "))]).lower() == err:
-                    final_error_list.append((i, " ".join(split_original_text[i: i+ len(err.split(" "))]), sugg.replace(" ", "_")))
-
+                    final_error_list.append((i, " ".join(split_original_text[i: i+ len(err.split(" "))]), sugg))
+        print(final_error_list)
+        # deduplicate
+        final_error_list = list(set(final_error_list))
         return checked_text, final_error_list
 
 
