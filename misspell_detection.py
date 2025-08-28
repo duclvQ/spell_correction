@@ -21,6 +21,16 @@ def is_datetime(s: str, fmt_list=None) -> bool:
         except ValueError:
             continue
     return False
+def is_comma_inside_number(s: str) -> bool:
+    """Check if a string is a number with comma inside"""
+    if "," not in s: 
+        return False
+    s = s.replace(",", "")
+    try:
+        float(s)
+        return True
+    except ValueError:
+        return False
 # replace uỷ with ủy
 dict_map = {
     "òa": "oà",
@@ -101,13 +111,13 @@ def clean_sentence(text):
     
     text = re.sub(r'\s+', ' ', text)                         # bỏ space thừa
     text = re.sub(r'\s+([.,!?;:])', r'\1', text)             # bỏ space trước dấu câu
-    text = re.sub(r'([.,!?;:])(?!\s|$)', r'\1 ', text)       # thêm space sau dấu câu
+    text = re.sub(r'(?<!\d)([.,!?;:])(?!\s|$)', r'\1 ', text)
     text = re.sub(r'\s+([\)\]])', r'\1', text)               # bỏ space trước ) ]
     text = re.sub(r'([\)\]])(?![\s.,!?;:])', r'\1 ', text)   # thêm space sau ) ]
     text = re.sub(r'\.{2,}', '.', text)                      # nhiều dấu chấm -> 1
     text = text[0].upper() + text[1:] if text else text      # viết hoa đầu câu
     # after punctuation must be a space and capitalized
-    text = re.sub(r'([.!?;:])\s*(\w)', lambda m: m.group(1) + ' ' + m.group(2).upper(), text)
+    text = re.sub(r'([.!?:])\s*(\w)', lambda m: m.group(1) + ' ' + m.group(2).upper(), text)
     # if not re.search(r'[.?!]$', text):                       # kết thúc bằng dấu câu
     #     text += '.'
     # text = text.replace("chào", "_")
@@ -454,10 +464,14 @@ class BertSpellChecker:
             })
         return data
     def is_in_special_case(self, word):
+        if is_number(word):
+            return True
         if word.isdigit():
             return True 
         # remove punctuation
         word = remove_punctuation(word)
+        if "," in word or "." in word:
+            return True
         # measurement
         if word in ["kg", "cm", "mm", "m", "km", "g", "mg", "l", "ml", "tấn", "tạ", "yên", "đôla", "đồng"]:
             return True
@@ -471,16 +485,31 @@ class BertSpellChecker:
         print("sentence:", sentence)
         for word in sentence.split(" "):
             word = word.lower()
+            num_phenoms = word.count("_") + 1
             if self.is_in_special_case(word):
-                # mark_sentences.append("<special_case>")
-                mark_sentences.append(word)
-                continue
-            word, is_correct_word, suggestion = spell_check_word(word)
-            if not is_correct_word:
-                print(f"error in check_single_word: {word} -> {suggestion}")
-                mark_sentences.append("<not_found_in_dict>")
+                    # mark_sentences.append("<special_case>")
+                    mark_sentences.append(word)
+                    continue
+            if num_phenoms > 4:
+            # split it into smaller parts
+                sub_words = word.split("_")
+                for s in sub_words:
+                    if self.is_in_special_case(s):
+                        mark_sentences.append(s)
+                        continue
+                    s, is_correct_word, suggestion = spell_check_word(s)
+                    if not is_correct_word:
+                        print(f"error in check_single_word (subword): {s} -> {suggestion}")
+                        mark_sentences.append("<not_found_in_dict>")
+                    else:
+                        mark_sentences.append(s)
             else:
-                mark_sentences.append(word)
+                word, is_correct_word, suggestion = spell_check_word(word)
+                if not is_correct_word:
+                    print(f"error in check_single_word: {word} -> {suggestion}")
+                    mark_sentences.append("<not_found_in_dict>")
+                else:
+                    mark_sentences.append(word)
         mark_sentences = " ".join(mark_sentences)
         mark_sentences = clean_sentence(mark_sentences)
         
@@ -595,19 +624,25 @@ class BertSpellChecker:
         print("final_bert_paragraph:", final_bert_paragraph)
         print("final_name_paragraph:", final_name_paragraph)
         # find diff
-        dict_replacements, cleaned_dict = get_replacement_from_formatted_sentence(text, final_dict_paragraph.replace('<not_found_in_dict>', '_'))
-        bert_replacements, cleaned_bert = get_replacement_from_formatted_sentence(text, final_bert_paragraph.replace('<not_found_in_bert>', '_'))
-        name_replacements, cleaned_name = get_replacement_from_formatted_sentence(text, final_name_paragraph.replace('<not_found_in_name>', '_'))
-
+        dict_replacements, cleaned_dict = get_replacement_from_formatted_sentence(ori_text.lower(), final_dict_paragraph.replace('<not_found_in_dict>', '_').lower())
+        bert_replacements, cleaned_bert = get_replacement_from_formatted_sentence(ori_text.lower(), final_bert_paragraph.replace('<not_found_in_bert>', '_').lower())
+        name_replacements, cleaned_name = get_replacement_from_formatted_sentence(ori_text.lower(), final_name_paragraph.replace('<not_found_in_name>', '_').lower())
+        print("cleaned_dict:", cleaned_dict)
+        print("cleaned_bert:", cleaned_bert)
+        print("cleaned_name:", cleaned_name)
         # get final replacement and cleaned_text, remove duplicates
         merged_replacements = []
         for rep in dict_replacements:
+            if is_comma_inside_number(rep['orig']):
+                continue    
             merged_replacements.append(rep)
         
         filtered_bert = []
         for rep in bert_replacements:
             for m in merged_replacements:
                 m_pos = m['pos']
+                if is_comma_inside_number(rep['orig']):
+                    continue    
                 if is_inside(m_pos, rep['pos']):
                     continue 
                 else:
@@ -618,6 +653,8 @@ class BertSpellChecker:
         for rep in name_replacements:
             for m in merged_replacements:
                 m_pos = m['pos']
+                if is_comma_inside_number(rep['orig']):
+                    continue    
                 if is_inside(m_pos, rep['pos']):
                     continue
                 else:
@@ -643,8 +680,9 @@ class BertSpellChecker:
             
                 # số lượng token gốc
             orig_len = end - start
-            print("orig_len:", orig_len)
+            # print("orig_len:", orig_len)
             # mark bằng "_" giữ nguyên độ dài
+        
             character_list_copy[start:end] = ["_"] * orig_len
 
         final_cleaned_text = "".join(character_list_copy)
@@ -653,7 +691,7 @@ class BertSpellChecker:
 
 if __name__ == "__main__":
     spell_checker = BertSpellChecker()
-    TXT = "Trun tâm Dự báo Khí tượng Thủy văn quốc gia cho biết lúc 7h hôm na, áp thấp nhiệt đới mạnh 61 km/h, cấp 6-7,"
+    TXT = "Theo Bộ Công Thương, thị trường xăng dầu thế giới 7 ngày qua chịu ảnh hưởng từ nhiều yếu tố như Mỹ tăng thuế với hàng hóa nhập khẩu từ Ấn Độ, Ukraine với Nga gia tăng tấn công nhằm vào cơ sở năng lượng của nhau. Biến động địa chính trị - kinh tế khiến giá xăng dầu thế giới có xu hướng tăng. Mỗi thùng xăng RON 95 bình quân tăng 1,6% lên 81,3 USD; Dầu thêm 1,1-2,9%."
     text = TXT
     marked_text, errors = spell_checker(text)
     print(f"Corrected Text: {marked_text}")

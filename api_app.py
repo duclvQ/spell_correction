@@ -197,7 +197,7 @@ Trun tâm Dự báo Khí tượng Thủy văn quốc gia cho biết lúc 7h hôm
 """
     return HTMLResponse(content=html_content)
 
-@app.post("/api/check", response_model=SpellCheckResponse)
+@app.post("/api/check")
 async def api_check_spelling(request: SpellCheckRequest):
     """API endpoint for spell checking"""
     try:
