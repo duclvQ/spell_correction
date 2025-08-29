@@ -29634,3 +29634,4 @@ usd 1000
 hàng_hóa_nhập_khẩu 1000
 ukraine 1000
 ấn_độ 1000
+hoà_bình 1000

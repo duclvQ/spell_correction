@@ -115,7 +115,7 @@ def clean_sentence(text):
     text = re.sub(r'\s+([.,!?;:])', r'\1', text)             # bỏ space trước dấu câu
     text = re.sub(r'(?<!\d)([.,!?;:])(?!\s|$)', r'\1 ', text)
     text = re.sub(r'\s+([\)\]])', r'\1', text)               # bỏ space trước ) ]
-    text = re.sub(r'([\)\]])(?![\s.,!?;:])', r'\1 ', text)   # thêm space sau ) ]
+    text = re.sub(r'([\)\]])(?![\s!?;])', r'\1 ', text)   # thêm space sau ) ]
     text = re.sub(r'\.{2,}', '.', text)                      # nhiều dấu chấm -> 1
     text = text[0].upper() + text[1:] if text else text      # viết hoa đầu câu
     # after punctuation must be a space and capitalized
@@ -600,13 +600,13 @@ class BertSpellChecker:
         # corrected_text = clean_sentence(corrected_text)
         return corrected_text
     def check_text(self, ori_text):
-        cleaned_text = clean_sentence(ori_text)
-        if cleaned_text != ori_text:
-            print("Text was cleaned.")
-            replacement = get_replacement_from_formatted_sentence(ori_text, cleaned_text)
+        # cleaned_text = clean_sentence(ori_text)
+        # if cleaned_text != ori_text:
+        #     print("Text was cleaned.")
+        #     replacement = get_replacement_from_formatted_sentence(ori_text, cleaned_text)
             
-            return replacement[0], cleaned_text
-        sentences = split_into_sentences(cleaned_text)
+        #     return replacement[0], cleaned_text
+        sentences = split_into_sentences(ori_text)
 
         err_list = []
         
