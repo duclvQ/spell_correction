@@ -9,7 +9,7 @@ from typing import Optional, List, Dict
 from misspell_detection import BertSpellChecker
 from pyvi import ViTokenizer
 import asyncio
-asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+# asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -133,7 +133,7 @@ async def index():
         <p>Enter Vietnamese text to check for spelling errors:</p>
         
         <textarea id="inputText" rows="6" placeholder="Enter your Vietnamese text here...">
-Trun tâm Dự báo Khí tượng Thủy văn quốc gia cho biết lúc 7h hôm na, áp thấp nhiệt đới mạnh 61 km/h, cấp 6-7,
+            ...
         </textarea>
         
         <button onclick="checkSpelling()">Check Spelling</button>

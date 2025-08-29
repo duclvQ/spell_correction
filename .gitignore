@@ -5,6 +5,7 @@ corpus.viwiki/
 vit5-spelling-correction_3epochs/
 # dont ignore these files
 !vi_freq_dict.txt
+!vi_freq_dict copy.txt
 !freq_list_results.json
 !requirements.txt
 !README.md
