@@ -2,6 +2,7 @@
 corpus.viwiki/
 **/*.txt
 **/*/json
+vit5-spelling-correction_3epochs/
 # dont ignore these files
 !vi_freq_dict.txt
 !freq_list_results.json

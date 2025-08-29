@@ -3,7 +3,9 @@ import numpy as np
 import time 
 import copy
 from datetime import datetime
-
+import os
+from seq2seq import seq_2seq_correct_spelling
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 def is_datetime(s: str, fmt_list=None) -> bool:
     # nếu không truyền format thì dùng default phổ biến
     if fmt_list is None:
@@ -456,6 +458,7 @@ class BertSpellChecker:
             if "_" in word or len(word) < 2:
                 continue
             masked_text = words[:idx] + [mask_token] + words[idx+1:]
+            print(f"Masked Text: {' '.join(masked_text)}")
             masked_text = " ".join(masked_text)
             data.append({
                 "text": masked_text,
@@ -480,17 +483,25 @@ class BertSpellChecker:
         if len(word) < 2:
             return True
         return False
-    def check_single_word(self, sentence):
+    def check_single_word(self, sentence, entity_dict=None):
         mark_sentences = []
         print("sentence:", sentence)
+        names = [ e.lower() for e in entity_dict] if entity_dict else []
+        print("names:", names)
         for word in sentence.split(" "):
             word = word.lower()
             num_phenoms = word.count("_") + 1
+            if word in names or word.replace("_", " ") in names:
+                mark_sentences.append(word)
+                continue
             if self.is_in_special_case(word):
                     # mark_sentences.append("<special_case>")
                     mark_sentences.append(word)
                     continue
-            if num_phenoms > 4:
+            if num_phenoms > 2:
+                mark_sentences.append(word)
+
+                continue
             # split it into smaller parts
                 sub_words = word.split("_")
                 for s in sub_words:
@@ -582,13 +593,19 @@ class BertSpellChecker:
                 text = text.replace(name, f"<not_found_in_name>")
         text = clean_sentence(text)
         return text
+    def seq2seq_correction(self, text):
+        # split into sentences
+        sentences = split_into_sentences(text)
+        corrected_text = seq_2seq_correct_spelling(text)
+        # corrected_text = clean_sentence(corrected_text)
+        return corrected_text
     def check_text(self, ori_text):
         cleaned_text = clean_sentence(ori_text)
         if cleaned_text != ori_text:
             print("Text was cleaned.")
             replacement = get_replacement_from_formatted_sentence(ori_text, cleaned_text)
             
-            return replacement, cleaned_text
+            return replacement[0], cleaned_text
         sentences = split_into_sentences(cleaned_text)
 
         err_list = []
@@ -601,35 +618,46 @@ class BertSpellChecker:
         dict_results = []
         bert_results = []
         name_results = []
+        seq2seq_results = []
         for text in sentences:
             entities = self.ner_extractor(text)
             text, entity_dict = self.mask_entities(text, entities)
 
-            segmented_text = self.segmenter_2(text)
-            dict_results.append(self.check_single_word(segmented_text))
-            bert_results.append(self.check_bert_mask(segmented_text, entity_dict, 200))
+            segmented_text = self.segmenter_1(text)
+            dict_results.append(self.check_single_word(segmented_text, entity_dict))
+
+            # bert_results.append(self.check_bert_mask(segmented_text, entity_dict, 200))
+            seq2seq_results.append(self.seq2seq_correction(text))
+
             name_results.append(self.check_valid_entity_name(segmented_text, entities))
                     # list_of_segmented_words[index] = f"*{word}*"
                     # print(f"masked_text: {masked_text}, index: {index}, word: {word}, prediction: {predictions[0]['token_str']}")
 
         final_dict_paragraph = " ".join(dict_results)
-        final_bert_paragraph = " ".join(bert_results)
+        # final_bert_paragraph = " ".join(bert_results)
+        final_seq2seq_paragraph = " ".join(seq2seq_results)
         final_name_paragraph = " ".join(name_results)
         # remove _ in paragrph
         final_dict_paragraph = replace_underscore_outside_tags(final_dict_paragraph)
-        final_bert_paragraph = replace_underscore_outside_tags(final_bert_paragraph)
+        # final_bert_paragraph = replace_underscore_outside_tags(final_bert_paragraph)
         final_name_paragraph = replace_underscore_outside_tags(final_name_paragraph)
         print("after replacing underscores:")
         print("final_dict_paragraph:", final_dict_paragraph)
-        print("final_bert_paragraph:", final_bert_paragraph)
+        # print("final_bert_paragraph:", final_bert_paragraph)
         print("final_name_paragraph:", final_name_paragraph)
+        print("final_seq2seq_paragraph:", final_seq2seq_paragraph)
         # find diff
         dict_replacements, cleaned_dict = get_replacement_from_formatted_sentence(ori_text.lower(), final_dict_paragraph.replace('<not_found_in_dict>', '_').lower())
-        bert_replacements, cleaned_bert = get_replacement_from_formatted_sentence(ori_text.lower(), final_bert_paragraph.replace('<not_found_in_bert>', '_').lower())
+        # bert_replacements, cleaned_bert = get_replacement_from_formatted_sentence(ori_text.lower(), final_bert_paragraph.replace('<not_found_in_bert>', '_').lower())
         name_replacements, cleaned_name = get_replacement_from_formatted_sentence(ori_text.lower(), final_name_paragraph.replace('<not_found_in_name>', '_').lower())
+        seq2seq_replacements, cleaned_seq2seq = get_replacement_from_formatted_sentence(ori_text, final_seq2seq_paragraph)
         print("cleaned_dict:", cleaned_dict)
-        print("cleaned_bert:", cleaned_bert)
+        # print("cleaned_bert:", cleaned_bert)
         print("cleaned_name:", cleaned_name)
+        print("cleaned_seq2seq:", cleaned_seq2seq)
+        print("seq2seq_replacements:", seq2seq_replacements)
+        print('dict_replacements:', dict_replacements)
+        print('name_replacements:', name_replacements)
         # get final replacement and cleaned_text, remove duplicates
         merged_replacements = []
         for rep in dict_replacements:
@@ -638,28 +666,36 @@ class BertSpellChecker:
             merged_replacements.append(rep)
         
         filtered_bert = []
-        for rep in bert_replacements:
-            for m in merged_replacements:
-                m_pos = m['pos']
-                if is_comma_inside_number(rep['orig']):
-                    continue    
-                if is_inside(m_pos, rep['pos']):
-                    continue 
-                else:
-                    if not rep in merged_replacements and not rep in filtered_bert:
-                        filtered_bert.append(rep)
+        if len(merged_replacements) > 0:
+            for rep in seq2seq_replacements:
+                for m in merged_replacements:
+                    m_pos = m['pos']
+                    if is_comma_inside_number(rep['orig']):
+                        continue    
+                    if is_inside(m_pos, rep['pos']):
+                        continue 
+                    else:
+                        if not rep in merged_replacements and not rep in filtered_bert:
+                            filtered_bert.append(rep)
+        else:
+            filtered_bert = seq2seq_replacements
         merged_replacements.extend(filtered_bert)
         filtered_name = []
+       
         for rep in name_replacements:
-            for m in merged_replacements:
-                m_pos = m['pos']
-                if is_comma_inside_number(rep['orig']):
-                    continue    
-                if is_inside(m_pos, rep['pos']):
-                    continue
-                else:
-                    if not rep in merged_replacements and not rep in filtered_name:
-                        filtered_name.append(rep)
+            if merged_replacements:
+                for m in merged_replacements:
+                    m_pos = m['pos']
+                    if is_comma_inside_number(rep['orig']):
+                        continue    
+                    if is_inside(m_pos, rep['pos']):
+                        continue
+                    else:
+                        if not rep in merged_replacements and not rep in filtered_name:
+                            filtered_name.append(rep)
+            else:
+                filtered_name = name_replacements
+                break
         merged_replacements.extend(filtered_name)
         print("merged_replacements:", merged_replacements   )
         final_cleaned_text = ori_text
@@ -691,7 +727,7 @@ class BertSpellChecker:
 
 if __name__ == "__main__":
     spell_checker = BertSpellChecker()
-    TXT = "Theo Bộ Công Thương, thị trường xăng dầu thế giới 7 ngày qua chịu ảnh hưởng từ nhiều yếu tố như Mỹ tăng thuế với hàng hóa nhập khẩu từ Ấn Độ, Ukraine với Nga gia tăng tấn công nhằm vào cơ sở năng lượng của nhau. Biến động địa chính trị - kinh tế khiến giá xăng dầu thế giới có xu hướng tăng. Mỗi thùng xăng RON 95 bình quân tăng 1,6% lên 81,3 USD; Dầu thêm 1,1-2,9%."
+    TXT = "Thủ tướng Phạm Minh Chính đax tham gia cùng tổng bí thư Tô Lâm"
     text = TXT
     marked_text, errors = spell_checker(text)
     print(f"Corrected Text: {marked_text}")

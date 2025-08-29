@@ -8,7 +8,8 @@ import logging
 from typing import Optional, List, Dict
 from misspell_detection import BertSpellChecker
 from pyvi import ViTokenizer
-
+import asyncio
+asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -220,12 +221,6 @@ async def health_check():
         "service": "Vietnamese Spell Checker API",
         "version": "1.0.0"
     }
-
-# Add startup event
-@app.on_event("startup")
-async def startup_event():
-    """Initialize the spell checker on startup"""
-    logger.info("Starting Vietnamese Spell Checker API...")
 
 if __name__ == '__main__':
     import uvicorn

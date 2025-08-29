@@ -25,7 +25,7 @@ def check_and_correct_word(word):
         else:
             return word, True, suggestions[0].term
 
-    return word, False, "not_found"  # Return the original word if no suggestions found
+    return word, True, "not_found"  # Return the original word if no suggestions found
 
 sym_one_word = SymSpell(max_dictionary_edit_distance=3, prefix_length=7)
 one_word_dict = "vi_freq_dict.txt"

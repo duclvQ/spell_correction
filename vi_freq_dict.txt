@@ -29631,3 +29631,6 @@ biệt_lập 9735
 biệt 973
 lập 973
 usd 1000
+hàng_hóa_nhập_khẩu 1000
+ukraine 1000
+ấn_độ 1000
