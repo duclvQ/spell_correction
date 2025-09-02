@@ -5,6 +5,7 @@ import copy
 from datetime import datetime
 import os
 from seq2seq import seq_2seq_correct_spelling
+from title_list_check import is_matched_titleName
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 def is_datetime(s: str, fmt_list=None) -> bool:
     # nếu không truyền format thì dùng default phổ biến
@@ -587,6 +588,9 @@ class BertSpellChecker:
         for entity in entities:
             name = entity[0]
             word, is_correct, suggestion = check_and_correct_word(name)
+            if not is_matched_titleName( text, name):
+                # skip if not in title list
+                continue
             if not is_correct:
                 print(f"error in check_valid_entity_name: {name} -> {suggestion}")
                 # replace this name with <error_found_in_name>
