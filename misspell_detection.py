@@ -6,6 +6,7 @@ from datetime import datetime
 import os
 from seq2seq import seq_2seq_correct_spelling
 from title_list_checker import is_matched_titleName
+from utils import apply_ops_with_offset
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 def is_datetime(s: str, fmt_list=None) -> bool:
     # nếu không truyền format thì dùng default phổ biến
@@ -674,6 +675,16 @@ class BertSpellChecker:
             for rep in seq2seq_replacements:
                 for m in merged_replacements:
                     m_pos = m['pos']
+                    # if m_pos[0]==m_pos[1]: # skip insert
+                        # find the word that include this position and mark that word as error
+                        # blank_indices = [m.start() for m in re.finditer(" ", ori_text)]
+                        # for i in range(len(blank_indices)-1):
+                        #     if blank_indices[i] < m_pos[0] <= blank_indices[i+1]:
+                        #         # find the word that include this position and mark that word as error
+                        #         m['pos'] = (blank_indices[i]+1, blank_indices[i+1])
+                                
+                                # break
+                        # pass 
                     if is_comma_inside_number(rep['orig']):
                         continue    
                     if is_inside(m_pos, rep['pos']):
@@ -710,20 +721,27 @@ class BertSpellChecker:
             character_list.append(c)
         character_list_copy = copy.copy(character_list)
 
-        for r in merged_replacements:
-            op = r['op']
-            orig = r['orig']
-            repl = r['repl']
-            pos = r['pos']
-            start, end = pos
-            repl_tokens = list(repl)
+        # for r in merged_replacements:
+        #     op = r['op']
+        #     orig = r['orig']
+        #     repl = r['repl']
+        #     pos = r['pos']
+        #     start, end = pos
+        #     repl_tokens = list(repl)
             
-                # số lượng token gốc
-            orig_len = end - start
-            # print("orig_len:", orig_len)
-            # mark bằng "_" giữ nguyên độ dài
+        #         # số lượng token gốc
+        #     orig_len = end - start
+        #     # print("orig_len:", orig_len)
+        #     # mark bằng "_" giữ nguyên độ dài
         
-            character_list_copy[start:end] = ["_"] * orig_len
+        #     character_list_copy[start:end] = ["_"] * orig_len
+        #     if op == "insert":
+        #         character_list_copy.insert(start, f"<insert|{repl_tokens}|>")
+        #     elif op == "delete":
+        #         character_list_copy[start:end] = ["<delete|{}|>".format("".join(character_list[start:end]))]
+        #     elif op == "replace":
+        #         character_list_copy[start:end] = [f"<replace|{''.join(repl_tokens)}|>"]
+        character_list_copy = apply_ops_with_offset(ori_text, merged_replacements)
 
         final_cleaned_text = "".join(character_list_copy)
         print("final_cleaned_text:", final_cleaned_text)
@@ -731,7 +749,7 @@ class BertSpellChecker:
 
 if __name__ == "__main__":
     spell_checker = BertSpellChecker()
-    TXT = "Từ robot, máy bay không người lái đến không gian thực tế ảo, Triển lãm thành tựu đất nước lan toả tinh thần thúc đẩy khoa học công nghệ, đổi mới sáng tạo đến hàng trăm nghìn người tham quan."
+    TXT = "Từ robot, máy bay khôn người lái đến không gian thực tế ảo, Triển lãm thành tựu đất nước lan toả tinh thần thúc đẩy khoa học công nghệ, đổi mới sáng tạo đến hàng trăm nghìn người tham quan."
     text = TXT
     marked_text, errors = spell_checker(text)
     print(f"Corrected Text: {marked_text}")
