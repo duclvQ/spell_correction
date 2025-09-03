@@ -1,43 +1,98 @@
 
 import re 
 
-def intersect(pos1, pos2):
-    """Check if two position ranges intersect"""
-    if pos1[0] < pos2[1] and pos2[0] < pos1[1]:
-        return True
-    if pos1[0] == pos2[0] and pos1[1] == pos2[1]:
-        return True
-    # inside
-    if pos1[0] < pos2[0] and pos1[1] > pos2[1]:
-        return True
-    if pos1[0] > pos2[0] and pos1[1] < pos2[1]:
-        return True
-    return False
+def intersects(a, b):
+    # Half-open intervals [start, end): overlap iff starts are before the other's end
+    return a[0] < b[1] and b[0] < a[1]
+
+def span_len(pos):
+    return pos[1] - pos[0]
+
+def filter_overlaps_keep_longest(repls):
+    """
+    repls: list[{'pos': (start, end), ...}]
+    Returns a new list with no overlaps, keeping the longest item inside each
+    overlapping cluster. If lengths tie, keeps the earliest (smallest start, then smallest end).
+    """
+    if not repls:
+        return []
+
+    # sort by start then end for stable grouping
+    items = sorted(repls, key=lambda r: (r['pos'][0], r['pos'][1]))
+    result = []
+
+    # start first group
+    group = [items[0]]
+    group_max_end = items[0]['pos'][1]
+
+    for itm in items[1:]:
+        if itm['pos'][0] < group_max_end and intersects(itm['pos'], group[-1]['pos']):
+            # still overlapping with current group
+            group.append(itm)
+            group_max_end = max(group_max_end, itm['pos'][1])
+        else:
+            # close previous group -> pick the best
+            best = max(group, key=lambda r: (span_len(r['pos']), -r['pos'][0], -r['pos'][1]))
+            result.append(best)
+            # start new group
+            group = [itm]
+            group_max_end = itm['pos'][1]
+
+    # close last group
+    best = max(group, key=lambda r: (span_len(r['pos']), -r['pos'][0], -r['pos'][1]))
+    result.append(best)
+
+    return result
+def filter_overlaps_keep_shortest(repls):
+    """
+    Keep the SHORTEST item in each overlapping cluster.
+    Tie-break: earliest start, then earliest end.
+    """
+    if not repls:
+        return []
+
+    items = sorted(repls, key=lambda r: (r['pos'][0], r['pos'][1]))
+    result = []
+
+    group = [items[0]]
+    group_max_end = items[0]['pos'][1]
+
+    for itm in items[1:]:
+        if itm['pos'][0] < group_max_end and intersects(itm['pos'], group[-1]['pos']):
+            group.append(itm)
+            group_max_end = max(group_max_end, itm['pos'][1])
+        else:
+            best = min(group, key=lambda r: (span_len(r['pos']), r['pos'][0], r['pos'][1]))
+            result.append(best)
+            group = [itm]
+            group_max_end = itm['pos'][1]
+
+    best = min(group, key=lambda r: (span_len(r['pos']), r['pos'][0], r['pos'][1]))
+    result.append(best)
+
+    return result
+def mark_overlaps_noop(merged_replacements):
+    keep = filter_overlaps_keep_longest(merged_replacements)
+    keep_ids = {id(x) for x in keep}  # identity to avoid deep equality pitfalls
+    cleaned = []
+    for r in merged_replacements:
+        if id(r) in keep_ids:
+            cleaned.append(r)
+        else:
+            # copy so original input isn't mutated (optional)
+            rr = dict(r)
+            rr['op'] = 'noop'
+            cleaned.append(rr)
+    return cleaned
+
 
 def apply_ops_with_offset(text, merged_replacements):
     chars = list(text)
     # sort by start ascending
     merged_replacements = sorted(merged_replacements, key=lambda r: r['pos'][0])
 
-    cleaned_replacements = []
-    # remove redundant replacements
-    for i in range(len(merged_replacements)):
-        if len(cleaned_replacements)<1:
-            cleaned_replacements.append(merged_replacements[i])
-        else:
-            for c in cleaned_replacements:
-                if intersect(c['pos'], merged_replacements[i]['pos']):
-                    # keep the one with the longer length
-                    if c['pos'][1] - c['pos'][0] > merged_replacements[i]['pos'][1] - merged_replacements[i]['pos'][0]:
-                        merged_replacements[i]['op'] = "noop"
-                        pass
-                    else:
-                        # c['op'] = "noop"
-                        pass 
-                else:
-                    cleaned_replacements.append(merged_replacements[i])
-    merged_replacements = cleaned_replacements
-
+    clean_replacements = filter_overlaps_keep_shortest(merged_replacements)
+    merged_replacements = clean_replacements
     offset = 0
     for r in merged_replacements:
         op   = r['op']
