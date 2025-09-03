@@ -749,7 +749,7 @@ class BertSpellChecker:
 
 if __name__ == "__main__":
     spell_checker = BertSpellChecker()
-    TXT = "Từ robot, máy bay khôn người lái đến không gian thực tế ảo, Triển lãm thành tựu đất nước lan toả tinh thần thúc đẩy khoa học công nghệ, đổi mới sáng tạo đến hàng trăm nghìn người tham quan."
+    TXT = "Chính chị gia ngừoi việt nam"
     text = TXT
     marked_text, errors = spell_checker(text)
     print(f"Corrected Text: {marked_text}")

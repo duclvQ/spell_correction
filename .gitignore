@@ -1,5 +1,6 @@
 # ignore a folder
 corpus.viwiki/
+config.yaml
 **/*.txt
 **/*/json
 vit5-spelling-correction_3epochs/
@@ -9,4 +10,3 @@ vit5-spelling-correction_3epochs/
 !freq_list_results.json
 !requirements.txt
 !README.md
-config.yaml
