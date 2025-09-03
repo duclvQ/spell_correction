@@ -5,7 +5,7 @@ import copy
 from datetime import datetime
 import os
 from seq2seq import seq_2seq_correct_spelling
-from title_list_check import is_matched_titleName
+from title_list_checker import is_matched_titleName
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 def is_datetime(s: str, fmt_list=None) -> bool:
     # nếu không truyền format thì dùng default phổ biến
@@ -499,7 +499,7 @@ class BertSpellChecker:
                     # mark_sentences.append("<special_case>")
                     mark_sentences.append(word)
                     continue
-            if num_phenoms > 2:
+            if num_phenoms > 1:
                 mark_sentences.append(word)
 
                 continue
@@ -731,7 +731,7 @@ class BertSpellChecker:
 
 if __name__ == "__main__":
     spell_checker = BertSpellChecker()
-    TXT = "Thủ tướng Phạm Minh Chính đax tham gia cùng tổng bí thư Tô Lâm"
+    TXT = "Từ robot, máy bay không người lái đến không gian thực tế ảo, Triển lãm thành tựu đất nước lan toả tinh thần thúc đẩy khoa học công nghệ, đổi mới sáng tạo đến hàng trăm nghìn người tham quan."
     text = TXT
     marked_text, errors = spell_checker(text)
     print(f"Corrected Text: {marked_text}")

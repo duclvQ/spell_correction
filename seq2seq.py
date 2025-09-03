@@ -1,6 +1,7 @@
 # load model 
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-model = AutoModelForSeq2SeqLM.from_pretrained("vit5-spelling-correction_3epochs")
+
+model = AutoModelForSeq2SeqLM.from_pretrained("/Users/leduc/Downloads/checkpoint-50000")
 device = "mps"
 model.to(device)
 tokenizer = AutoTokenizer.from_pretrained("VietAI/vit5-base")
