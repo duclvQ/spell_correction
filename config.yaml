@@ -1,3 +1,0 @@
-t5_path: D:\source_AI\checkpoints\T5\checkpoint-50000\checkpoint-50000
-# device: mps
-device: cuda
