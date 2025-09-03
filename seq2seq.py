@@ -1,8 +1,15 @@
 # load model 
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+import yaml
+# load config 
+config_path = "config.yaml"
+with open(config_path, "r") as f:
+    config = yaml.safe_load(f)
 
-model = AutoModelForSeq2SeqLM.from_pretrained("/Users/leduc/Downloads/checkpoint-50000")
-device = "mps"
+model_path = config.get("t5_path", "/Users/leduc/Downloads/checkpoint-50000")
+
+model = AutoModelForSeq2SeqLM.from_pretrained(model_path)
+device = config.get("device", "cpu")
 model.to(device)
 tokenizer = AutoTokenizer.from_pretrained("VietAI/vit5-base")
 def seq_2seq_correct_spelling(input_text):
