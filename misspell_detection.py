@@ -248,18 +248,25 @@ class NER_Extractor:
         self.nlp = pipeline("ner", model=self.model, tokenizer=self.tokenizer)
     def __call__(self, query: str):
         """Call the NER extractor"""
-        return self.extract_entities(self.get_raw_ner(query))
+        return self.extract_entities(query, self.get_raw_ner(query))
 
     def get_raw_ner(self, query: str):
         """Get raw NER results from the model"""
         return self.nlp(query)
-    def extract_entities(self, ner_results):
+    def extract_entities(self, query, ner_results):
         entities = []
         current_entity = ""
         current_type = None
 
-
+        last_end = -1
+        current_ner = ""
         for item in ner_results:
+            print("ner", item)
+            start, end = item['start'], item['end']
+            if current_ner == "":
+                current_ner = item['word']
+            else:
+                current_ner += " " + item['word']
             ent_type = item['entity'].split('-')[-1]
             if item['entity'].startswith('B-'):
                 if current_entity:
@@ -267,12 +274,20 @@ class NER_Extractor:
                 current_entity = item['word']
                 current_type = ent_type
             elif item['entity'].startswith('I-') and current_type == ent_type:
-                current_entity += " " + item['word']
+                space = ""
+                print("start", start)
+                print("last_end", last_end)
+                if start - last_end > 0:
+                    
+                    space = " "
+                current_entity += space + query[start:end]
             else:
                 if current_entity:
                     entities.append((current_entity.strip(), current_type))
                 current_entity = ""
                 current_type = None
+            last_end = end
+            
 
         if current_entity:
             
@@ -586,17 +601,25 @@ class BertSpellChecker:
         print("final_mark_sentences_bert:", marked_text)
         return marked_text
     def check_valid_entity_name(self, text, entities):
+        # lower the text
+        text = text
+        print("text before replace:",text)
+        
         for entity in entities:
             name = entity[0]
             word, is_correct, suggestion = check_and_correct_word(name)
+            print("name results:", word, is_correct, suggestion)
             if not is_matched_titleName( text, name):
+                print("skip")
                 # skip if not in title list
                 continue
             if not is_correct:
                 print(f"error in check_valid_entity_name: {name} -> {suggestion}")
                 # replace this name with <error_found_in_name>
+                print("text before replace:",text)
                 text = text.replace(name, f"<not_found_in_name>")
-        text = clean_sentence(text)
+                print("text after replace:",text)
+        # text = clean_sentence(text)
         return text
     def seq2seq_correction(self, text):
         # split into sentences
@@ -634,7 +657,7 @@ class BertSpellChecker:
             # bert_results.append(self.check_bert_mask(segmented_text, entity_dict, 200))
             seq2seq_results.append(self.seq2seq_correction(text))
 
-            name_results.append(self.check_valid_entity_name(segmented_text, entities))
+            name_results.append(self.check_valid_entity_name(text, entities))
                     # list_of_segmented_words[index] = f"*{word}*"
                     # print(f"masked_text: {masked_text}, index: {index}, word: {word}, prediction: {predictions[0]['token_str']}")
 
@@ -642,6 +665,7 @@ class BertSpellChecker:
         # final_bert_paragraph = " ".join(bert_results)
         final_seq2seq_paragraph = " ".join(seq2seq_results)
         final_name_paragraph = " ".join(name_results)
+        
         # remove _ in paragrph
         final_dict_paragraph = replace_underscore_outside_tags(final_dict_paragraph)
         # final_bert_paragraph = replace_underscore_outside_tags(final_bert_paragraph)
@@ -745,7 +769,8 @@ class BertSpellChecker:
 
         final_cleaned_text = "".join(character_list_copy)
         print("final_cleaned_text:", final_cleaned_text)
-        return merged_replacements, final_cleaned_text
+        seq2seq_text = final_seq2seq_paragraph
+        return merged_replacements, final_cleaned_text, seq2seq_text
 
 if __name__ == "__main__":
     spell_checker = BertSpellChecker()

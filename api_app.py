@@ -85,11 +85,11 @@ class SpellCheckerAPI:
             
             logger.info(f"Processing text: {text[:100]}...")
          
-            errors, corrected_sentence = self.spell_checker(text)
+            errors, corrected_sentence, seq2seq_text = self.spell_checker(text)
             results = {
                 "status": "success",
                 "original_text": text,
-                "new_text": corrected_sentence,
+                "new_text": seq2seq_text,
                 "replacement": errors
             }
             print("results", results)
