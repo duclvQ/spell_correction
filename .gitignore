@@ -3,7 +3,15 @@ corpus.viwiki/
 config.yaml
 **/*.txt
 **/*/json
+**/*.safetensors
+**/*/json
+**/*.pt
+**/*.pth
+**/*.log
+**/*.ckpt
+**/*.model
 vit5-spelling-correction_3epochs/
+checkpoint-50000/
 # dont ignore these files
 !vi_freq_dict.txt
 !vi_freq_dict copy.txt
