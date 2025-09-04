@@ -105,13 +105,15 @@ def apply_ops_with_offset(text, merged_replacements):
 
         s_adj = s + offset
         e_adj = e + offset
-        print("s_adj", s_adj)
-        print("e_adj", e_adj)
-        print("offset", offset)
+        # print("len chars", len(chars))
+        # print("s_adj", s_adj)
+        # print("e_adj", e_adj)
+        # print("offset", offset)
         if op == "insert":
             # skip if before and after is digit
-            if s_adj > 0 and e_adj < len(chars) and chars[s_adj-1].isdigit() or chars[e_adj].isdigit():
-                continue
+            if e_adj < len(chars):
+                if s_adj > 0 and chars[s_adj-1].isdigit() or chars[e_adj].isdigit():
+                    continue
             tag = f"<insert|{repl}|>"
             chars[s_adj:s_adj] = tag
             delta = len(tag)  # inserted length

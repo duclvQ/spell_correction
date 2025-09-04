@@ -261,7 +261,7 @@ class NER_Extractor:
         last_end = -1
         current_ner = ""
         for item in ner_results:
-            print("ner", item)
+            # print("ner", item)
             start, end = item['start'], item['end']
             if current_ner == "":
                 current_ner = item['word']
@@ -275,8 +275,8 @@ class NER_Extractor:
                 current_type = ent_type
             elif item['entity'].startswith('I-') and current_type == ent_type:
                 space = ""
-                print("start", start)
-                print("last_end", last_end)
+                # print("start", start)
+                # print("last_end", last_end)
                 if start - last_end > 0:
                     
                     space = " "
@@ -774,8 +774,9 @@ class BertSpellChecker:
 
 if __name__ == "__main__":
     spell_checker = BertSpellChecker()
-    TXT = "Chính chị gia ngừoi việt nam"
+    TXT = "đây là tổng bí thư Tôn Lâm và thủ tướng Nguyễn Minh Chính."
     text = TXT
-    marked_text, errors = spell_checker(text)
+    marked_text, errors, seq2seq_text = spell_checker(text)
     print(f"Corrected Text: {marked_text}")
     print(f"Errors: {errors}")
+    print(f"suggest text: {seq2seq_text}")

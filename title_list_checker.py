@@ -11,7 +11,8 @@ def is_matched_titleName(text, name):
     name = name.lower()
     segmented_text_list = text.split(" ")
     for title in titles:
+    
         title = title.lower()
-        if title in text:
+        if title in text or title.replace("_", " ") in text:
             return True
     return False
